@@ -6,7 +6,7 @@ from ..cupy_utils import xp
 from ..utils import beta_dist, truncnorm, unnormalized_2d_gaussian
 
 
-def iid_spin(dataset, xi_spin, sigma_spin, amax, alpha_chi, beta_chi, lambda_chi_peak):
+def iid_spin(dataset, xi_spin, sigma_spin, amax, alpha_chi, beta_chi, lambda_chi_peak, sigma_chi_peak):
     r"""
     Independently and identically distributed spins.
     The magnitudes are assumed to follow a Beta distribution and the
@@ -28,11 +28,11 @@ def iid_spin(dataset, xi_spin, sigma_spin, amax, alpha_chi, beta_chi, lambda_chi
     """
     prior = iid_spin_orientation_gaussian_isotropic(
         dataset, xi_spin, sigma_spin
-    ) * iid_spin_magnitude_beta(dataset, amax, alpha_chi, beta_chi, lambda_chi_peak)
+    ) * iid_spin_magnitude_beta(dataset, amax, alpha_chi, beta_chi, lambda_chi_peak, sigma_chi_peak)
     return prior
 
 
-def iid_spin_magnitude_beta(dataset, amax=1, alpha_chi=1, beta_chi=1, lambda_chi_peak=0):
+def iid_spin_magnitude_beta(dataset, amax=1, alpha_chi=1, beta_chi=1, lambda_chi_peak=0, sigma_chi_peak=0.04):
     """Independent and identically distributed beta distributions for both spin magnitudes.
 
     https://arxiv.org/abs/1805.06442 Eq. (10)
@@ -48,12 +48,12 @@ def iid_spin_magnitude_beta(dataset, amax=1, alpha_chi=1, beta_chi=1, lambda_chi
         Maximum black hole spin.
     """
     return independent_spin_magnitude_beta(
-        dataset, alpha_chi, alpha_chi, beta_chi, beta_chi, amax, amax, lambda_chi_peak, lambda_chi_peak
+        dataset, alpha_chi, alpha_chi, beta_chi, beta_chi, amax, amax, lambda_chi_peak, lambda_chi_peak, sigma_chi_peak, sigma_chi_peak
     )
 
 
 def independent_spin_magnitude_beta(
-    dataset, alpha_chi_1, alpha_chi_2, beta_chi_1, beta_chi_2, amax_1, amax_2, lambda_chi_peak_1, lambda_chi_peak_2
+    dataset, alpha_chi_1, alpha_chi_2, beta_chi_1, beta_chi_2, amax_1, amax_2, lambda_chi_peak_1, lambda_chi_peak_2, sigma_chi_peak_1, sigma_chi_peak_2,
 ):
     """Independent beta distributions for both spin magnitudes.
 
@@ -77,13 +77,13 @@ def independent_spin_magnitude_beta(
         (1 - lambda_chi_peak_1) * beta_dist(
             dataset["a_1"], alpha_chi_1, beta_chi_1, scale=amax_1
         ) + lambda_chi_peak_1 * truncnorm(
-            dataset["a_1"], mu=0, sigma=0.04, low=0, high=amax_1
+            dataset["a_1"], mu=0, sigma=sigma_chi_peak_1, low=0, high=amax_1
         )
     ) *  (
         (1 - lambda_chi_peak_2) * beta_dist(
         dataset["a_2"], alpha_chi_2, beta_chi_2, scale=amax_2
         ) + lambda_chi_peak_2 * truncnorm(
-            dataset["a_2"], mu=0, sigma=0.04, low=0, high=amax_2)
+            dataset["a_2"], mu=0, sigma=sigma_chi_peak_2, low=0, high=amax_2)
     )
     return prior
 
@@ -142,9 +142,11 @@ def independent_spin_orientation_gaussian_isotropic(dataset, xi_spin, sigma_spin
         Width of preferentially aligned component for the less
         massive black hole (:math:`\sigma_2`).
     """
-    prior = (1 - xi_spin) / 4 + xi_spin * truncnorm(
+    prior = (1 - xi_spin) / ((1 - zmin_1) * (1 - zmin_2)) + xi_spin * truncnorm(
         dataset["cos_tilt_1"], 1, sigma_spin_1, 1, zmin_1
     ) * truncnorm(dataset["cos_tilt_2"], 1, sigma_spin_2, 1, zmin_2)
+    bool_arr  = (dataset["cos_tilt_1"] >= zmin_1)*(dataset["cos_tilt_2"] >= zmin_2)
+    prior[bool_arr == False] = 0
     return prior
 
 
