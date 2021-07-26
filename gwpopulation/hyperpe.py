@@ -13,6 +13,8 @@ from bilby.core.utils import logger
 from bilby.core.likelihood import Likelihood
 from bilby.hyper.model import Model
 
+from .models import mass, redshift
+
 from .cupy_utils import CUPY_LOADED, to_numpy, xp
 
 INF = xp.nan_to_num(xp.inf)
@@ -29,8 +31,10 @@ class HyperparameterLikelihood(Likelihood):
 
     def __init__(
         self,
-        posteriors,
-        hyper_prior,
+        posteriors1,
+        posteriors2,
+        hyper_prior1,
+        hyper_prior2,
         ln_evidences=None,
         max_samples=1e100,
         selection_function=lambda args: 1,
@@ -67,9 +71,13 @@ class HyperparameterLikelihood(Likelihood):
         if cupy and not CUPY_LOADED:
             logger.warning("Cannot import cupy, falling back to numpy.")
 
-        self.samples_per_posterior = max_samples
-        self.data = self.resample_posteriors(posteriors, max_samples=max_samples)
-
+        #self.samples_per_posterior1 = max_samples
+        #self.samples_per_posterior2 = max_samples
+        self.data1, self.samples_per_posterior1 = self.resample_posteriors(posteriors1, max_samples=max_samples)
+        self.data2, self.samples_per_posterior2 = self.resample_posteriors(posteriors2, max_samples=max_samples)
+        logger.info(f"samples_per_posterior1 {self.samples_per_posterior1}, samples_per_posterior2 {self.samples_per_posterior2}")
+ 
+        '''
         if isinstance(hyper_prior, types.FunctionType):
             hyper_prior = Model([hyper_prior])
         elif not (
@@ -80,30 +88,44 @@ class HyperparameterLikelihood(Likelihood):
                 "hyper_prior must either be a function, "
                 "or a class with attribute 'parameters' and method 'prob'"
             )
-        self.hyper_prior = hyper_prior
-        Likelihood.__init__(self, hyper_prior.parameters)
+        '''
 
-        if "prior" in self.data:
-            self.sampling_prior = self.data.pop("prior")
+        self.hyper_prior1 = hyper_prior1 #Model([hyper_prior1])
+        self.hyper_prior2 = hyper_prior2 #Model([hyper_prior2]) #Model([mass.power_law_primary_mass_ratio, redshift.PowerLawRedshift])
+        
+        Likelihood.__init__(self, hyper_prior1.parameters)
+
+        if "prior" in self.data1:
+            self.sampling_prior1 = self.data1.pop("prior")
+            self.sampling_prior2 = self.data2.pop("prior")
         else:
             logger.info("No prior values provided, defaulting to 1.")
             self.sampling_prior = 1
+        
 
-        if ln_evidences is not None:
-            self.total_noise_evidence = np.sum(ln_evidences)
-        else:
-            self.total_noise_evidence = np.nan
-
+        ln_evidences1 = self.data1.pop("ln_evidence")
+        ln_evidences2 = self.data2.pop("ln_evidence")
+        self.total_noise_evidence1 = ln_evidences1[0]
+        self.total_noise_evidence2 = ln_evidences2[0]
+        
+        self.data2.pop("a_1")
+        self.data2.pop("a_2")
+        self.data2.pop("cos_tilt_1")
+        self.data2.pop("cos_tilt_2")
+        
         self.conversion_function = conversion_function
         self.selection_function = selection_function
 
-        self.n_posteriors = len(posteriors)
+        self.n_posteriors = len(posteriors1)
 
     __doc__ += __init__.__doc__
 
     def log_likelihood_ratio(self):
         self.parameters, added_keys = self.conversion_function(self.parameters)
-        self.hyper_prior.parameters.update(self.parameters)
+        self.hyper_prior1.parameters.update(self.parameters)
+        #for key in ['amax', 'alpha_chi', 'beta_chi', 'mu_chi', 'sigma_chi', 'xi_spin', 'sigma_spin', 'zmin']:
+        #    self.parameters.pop(key)
+        self.hyper_prior2.parameters.update(self.parameters)
         ln_l = xp.sum(self._compute_per_event_ln_bayes_factors())
         ln_l += self._get_selection_factor()
         if added_keys is not None:
@@ -121,9 +143,15 @@ class HyperparameterLikelihood(Likelihood):
         return self.noise_log_likelihood() + self.log_likelihood_ratio()
 
     def _compute_per_event_ln_bayes_factors(self):
-        return -np.log(self.samples_per_posterior) + xp.log(
-            xp.sum(self.hyper_prior.prob(self.data) / self.sampling_prior, axis=-1)
-        )
+        term1 = -np.log(self.samples_per_posterior1) + xp.log(xp.sum(self.hyper_prior1.prob(self.data1) / self.sampling_prior1, axis=-1))
+        logger.info(self.samples_per_posterior2)
+        logger.info(len(self.data2["mass_1"][0]))
+        logger.info(len(self.hyper_prior2.prob(self.data2)[0]))
+        logger.info(len(self.sampling_prior2[0]))
+        #prob = mass.power_law_primary_mass_ratio.prob(self.data2) * redshift.PowerLawRedshift.prob(self.data2)
+        term2 = -np.log(self.samples_per_posterior2) + xp.log(xp.sum(self.hyper_prior2.prob(self.data2) / self.sampling_prior2, axis=-1))
+        ln_l = np.log((1. - self.parameters["lambda_chi"])*np.exp(term1)*np.exp(self.total_noise_evidence1) + self.parameters["lambda_chi"]*np.exp(term2)*np.exp(self.total_noise_evidence1))
+        return ln_l
 
     def _get_selection_factor(self):
         return -self.n_posteriors * xp.log(self.selection_function(self.parameters))
@@ -147,7 +175,10 @@ class HyperparameterLikelihood(Likelihood):
         """
         self.parameters.update(sample.copy())
         self.parameters, added_keys = self.conversion_function(self.parameters)
-        self.hyper_prior.parameters.update(self.parameters)
+        self.hyper_prior1.parameters.update(self.parameters)
+        self.hyper_prior2.parameters.update(self.parameters)
+        logger.info(self.parameters)
+        #self.parameters.pop('')
         ln_ls = self._compute_per_event_ln_bayes_factors()
         for ii in range(self.n_posteriors):
             sample[f"ln_bf_{ii}"] = float(ln_ls[ii])
@@ -212,14 +243,14 @@ class HyperparameterLikelihood(Likelihood):
             max_samples = min(len(posterior), max_samples)
         data = {key: [] for key in posteriors[0]}
         logger.debug(f"Downsampling to {max_samples} samples per posterior.")
-        self.samples_per_posterior = max_samples
+        samples_per_posterior = max_samples
         for posterior in posteriors:
-            temp = posterior.sample(self.samples_per_posterior)
+            temp = posterior.sample(samples_per_posterior)
             for key in data:
                 data[key].append(temp[key])
         for key in data:
             data[key] = xp.array(data[key])
-        return data
+        return data, samples_per_posterior
 
     def posterior_predictive_resample(self, samples, return_weights=False):
         """
