@@ -32,7 +32,7 @@ def iid_spin(dataset, xi_spin, sigma_spin, amax, alpha_chi, beta_chi, lambda_chi
     return prior
 
 
-def iid_spin_magnitude_beta(dataset, amax=1, alpha_chi=1, beta_chi=1):# lambda_chi_peak=0, sigma_chi_peak=0.04):
+def iid_spin_magnitude_beta(dataset, amax=1, alpha_chi=1, beta_chi=1, lambda_chi_peak=0):#, sigma_chi_peak=0.04):
     """Independent and identically distributed beta distributions for both spin magnitudes.
 
     https://arxiv.org/abs/1805.06442 Eq. (10)
@@ -48,11 +48,11 @@ def iid_spin_magnitude_beta(dataset, amax=1, alpha_chi=1, beta_chi=1):# lambda_c
         Maximum black hole spin.
     """
     return independent_spin_magnitude_beta(
-        dataset, alpha_chi, alpha_chi, beta_chi, beta_chi, amax, amax)# lambda_chi_peak, lambda_chi_peak, sigma_chi_peak, sigma_chi_peak)
+        dataset, alpha_chi, alpha_chi, beta_chi, beta_chi, amax, amax, lambda_chi_peak, lambda_chi_peak)#, sigma_chi_peak, sigma_chi_peak)
 
 
 def independent_spin_magnitude_beta(
-    dataset, alpha_chi_1, alpha_chi_2, beta_chi_1, beta_chi_2, amax_1, amax_2):# lambda_chi_peak_1, lambda_chi_peak_2, sigma_chi_peak_1, sigma_chi_peak_2):
+    dataset, alpha_chi_1, alpha_chi_2, beta_chi_1, beta_chi_2, amax_1, amax_2, lambda_chi_peak_1, lambda_chi_peak_2):#, sigma_chi_peak_1, sigma_chi_peak_2):
     """Independent beta distributions for both spin magnitudes.
 
     https://arxiv.org/abs/1805.06442 Eq. (10)

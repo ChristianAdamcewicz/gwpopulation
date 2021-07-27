@@ -101,13 +101,20 @@ class HyperparameterLikelihood(Likelihood):
         else:
             logger.info("No prior values provided, defaulting to 1.")
             self.sampling_prior = 1
-        
+
+        if ln_evidences is not None:
+            self.total_noise_evidence = np.sum(ln_evidences)
+        else:
+            self.total_noise_evidence = np.nan
 
         ln_evidences1 = self.data1.pop("ln_evidence")
         ln_evidences2 = self.data2.pop("ln_evidence")
-        self.total_noise_evidence1 = ln_evidences1[0]
-        self.total_noise_evidence2 = ln_evidences2[0]
+        self.total_evidence1 = xp.asarray([val[0] for val in ln_evidences1])
+        self.total_evidence2 = xp.asarray([val[0] for val in ln_evidences2])
         
+        logger.info(f"log evidences = {self.total_evidence1}")
+        logger.info(f"log evidences = {self.total_evidence2}")
+
         self.data2.pop("a_1")
         self.data2.pop("a_2")
         self.data2.pop("cos_tilt_1")
@@ -123,8 +130,6 @@ class HyperparameterLikelihood(Likelihood):
     def log_likelihood_ratio(self):
         self.parameters, added_keys = self.conversion_function(self.parameters)
         self.hyper_prior1.parameters.update(self.parameters)
-        #for key in ['amax', 'alpha_chi', 'beta_chi', 'mu_chi', 'sigma_chi', 'xi_spin', 'sigma_spin', 'zmin']:
-        #    self.parameters.pop(key)
         self.hyper_prior2.parameters.update(self.parameters)
         ln_l = xp.sum(self._compute_per_event_ln_bayes_factors())
         ln_l += self._get_selection_factor()
@@ -143,14 +148,9 @@ class HyperparameterLikelihood(Likelihood):
         return self.noise_log_likelihood() + self.log_likelihood_ratio()
 
     def _compute_per_event_ln_bayes_factors(self):
-        term1 = -np.log(self.samples_per_posterior1) + xp.log(xp.sum(self.hyper_prior1.prob(self.data1) / self.sampling_prior1, axis=-1))
-        logger.info(self.samples_per_posterior2)
-        logger.info(len(self.data2["mass_1"][0]))
-        logger.info(len(self.hyper_prior2.prob(self.data2)[0]))
-        logger.info(len(self.sampling_prior2[0]))
-        #prob = mass.power_law_primary_mass_ratio.prob(self.data2) * redshift.PowerLawRedshift.prob(self.data2)
-        term2 = -np.log(self.samples_per_posterior2) + xp.log(xp.sum(self.hyper_prior2.prob(self.data2) / self.sampling_prior2, axis=-1))
-        ln_l = np.log((1. - self.parameters["lambda_chi"])*np.exp(term1)*np.exp(self.total_noise_evidence1) + self.parameters["lambda_chi"]*np.exp(term2)*np.exp(self.total_noise_evidence1))
+        term1 = xp.sum(self.hyper_prior1.prob(self.data1) / self.sampling_prior1, axis=-1)/self.samples_per_posterior1
+        term2 = xp.sum(self.hyper_prior2.prob(self.data2) / self.sampling_prior2, axis=-1)/self.samples_per_posterior2 * xp.exp(self.total_evidence2 - self.total_evidence1)
+        ln_l = xp.log((1. - self.parameters["lambda_chi_peak"])*term1 + self.parameters["lambda_chi_peak"]*term2)
         return ln_l
 
     def _get_selection_factor(self):
