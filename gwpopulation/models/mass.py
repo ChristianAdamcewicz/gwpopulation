@@ -14,13 +14,24 @@ def matter_matters(mass, A, NSmin, NSmax, BHmin, BHmax,
     the single-mass distribution considered in Fishbach, Essick, Holz. Does
     Matter Matter? ApJ Lett 899, 1 (2020) : arXiv:2006.13178
 
-    This math is incorrect for now
     .. math::
-        p(m | \alpha_1, m_\min, m_\max, \delta) &\propto \begin{cases}
-            m^{-\alpha_1} : m_\min \leq m < m_\min + \delta (m_\max - m_\min)\\
-            m^{-\alpha_2} : m_\min + \delta (m_\max - m_\min) \leq m < m_\max
-        \end{cases}
-
+        p(m|\lambda) = n(m|\gamma_{\text{low}}, \gamma_{\text{high}}, A) \times
+            l(m|m_{\text{max}}, \eta) \\
+                 \times \begin{cases}
+                         & m^{\alpha_1} \text{ if } m < \gamma_{\text{low}} \\
+                         & m^{\alpha_2} \text{ if } m > \gamma_{\text{low}} \\
+                         & 0 \text{ otherwise }
+                 \end{cases}.
+    
+    where $l(m|m_{\text{max}}, \eta)$ is the low pass filter with powerlaw $\eta$
+    applied at mass $m_{\text{max}}$,
+    $n(m|\gamma_{\text{low}}, \gamma_{\text{high}}, A)$ is the notch
+    filter with depth $A$ applied between $\gamma_{\text{low}}$ and 
+    $\gamma_{\text{high}}$, and
+    $\lambda$ is the subset of hyperparameters $\{ \gamma_{\text{low}},
+    \gamma_{\text{high}}, A, \alpha_1, \alpha_2, m_{\text{min}}, m_{\
+    text{max}}\}$.
+    
     Parameters
     ----------
     mass: array-like
@@ -47,7 +58,7 @@ def matter_matters(mass, A, NSmin, NSmax, BHmin, BHmax,
         depth of the dip between NSmax and BHmin (A).
     """
     mbreak=NSmax
-    logprob = xp.where(mass >= NSmin, 
+    logprob = xp.where((mass >= 0.5)*(mass <= 350), 
                        -xp.log(1 + (NSmin/mass)**n0) \
                        + xp.log(1.0 - A/((1 + (NSmax/mass)**n1) * (1 + (mass/BHmin)**n2))) \
                        - xp.log(1 + (mass/BHmax)**n3)\
@@ -318,8 +329,7 @@ def _primary_secondary_general(dataset, p_m1, p_m2):
     return p_m1 * p_m2 * (dataset["mass_1"] >= dataset["mass_2"]) * 2
 
 def _primary_secondary_plaw_pairing(dataset, p_m1, p_m2, beta_pair):
-    q = dataset["mass_2"]/dataset["mass_1"] #could add logic to take mass_ratio if
-    #its available and mass2 if its not
+    q = dataset["mass_2"]/dataset["mass_1"]
     return _primary_secondary_general(dataset, p_m1, p_m2) * (q ** beta_pair)
 
 
