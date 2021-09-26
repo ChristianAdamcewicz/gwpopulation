@@ -206,12 +206,12 @@ def matter_matters_primary_secondary_independent(dataset, A, NSmin, NSmax,
 
 
 def matter_matters_pairing(dataset, A, NSmin, NSmax,
-    BHmin, BHmax, n0, n1, n2, n3, mbreak, alpha_1, alpha_2, beta_q
+    BHmin, BHmax, n0, n1, n2, n3, mbreak, alpha_1, alpha_2, beta_q_1, beta_q_2
 ):
     r"""
     Two-dimenstional mass distribution considered in Fishbach, Essick, Holz. Does
     Matter Matter? ApJ Lett 899, 1 (2020) : arXiv:2006.13178 modelling the
-    primary and secondary masses as following independent distributions.
+    primary and secondary masses as being related by a pairing function.
 
     Parameters
     ----------
@@ -245,7 +245,8 @@ def matter_matters_pairing(dataset, A, NSmin, NSmax,
     p_m2 = matter_matters(dataset["mass_2"], A, NSmin, 
                           NSmax, BHmin, BHmax, n0, n1, n2, n3, mbreak, 
                           alpha_1, alpha_2)
-    prob = _primary_secondary_plaw_pairing(dataset, p_m1, p_m2, beta_q)
+    prob = _primary_secondary_mass_binned_pairing(dataset, p_m1, p_m2, beta_q_1,
+    beta_q_2, mbreak)
     return prob
 
 def double_power_law_primary_power_law_mass_ratio(
@@ -330,6 +331,12 @@ def _primary_secondary_general(dataset, p_m1, p_m2):
 
 def _primary_secondary_plaw_pairing(dataset, p_m1, p_m2, beta_pair):
     q = dataset["mass_2"]/dataset["mass_1"]
+    return _primary_secondary_general(dataset, p_m1, p_m2) * (q ** beta_pair)
+
+def _primary_secondary_mass_binned_pairing(dataset, p_m1, p_m2, beta_pair_1,
+beta_pair_2, mbreak):
+    q = dataset["mass_2"]/dataset["mass_1"]
+    beta_pair = xp.where(dataset["mass_2"] < mbreak, beta_pair_1, beta_pair_2)
     return _primary_secondary_general(dataset, p_m1, p_m2) * (q ** beta_pair)
 
 
