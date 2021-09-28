@@ -206,6 +206,48 @@ def matter_matters_primary_secondary_independent(dataset, A, NSmin, NSmax,
 
 
 def matter_matters_pairing(dataset, A, NSmin, NSmax,
+    BHmin, BHmax, n0, n1, n2, n3, mbreak, alpha_1, alpha_2, beta_q
+):
+    r"""
+    Two-dimenstional mass distribution considered in Fishbach, Essick, Holz. Does
+    Matter Matter? ApJ Lett 899, 1 (2020) : arXiv:2006.13178 modelling the
+    primary and secondary masses as being related by a pairing function.
+
+    Parameters
+    ----------
+    dataset: dict
+        Dictionary of numpy arrays for 'mass_1' (:math:`m_1`) and 
+        'mass_ratio' q (:math:`m_2=m_1*q`).
+    alpha_1: float
+        Powerlaw exponent for compact object below break (:math:`\alpha_1`).
+    alpha_2: float
+        Powerlaw exponent for compact object above break (:math:`\alpha_2`).
+    mbreak: float
+        Mass at which the power law exponent switches from alpha_1 to alpha_2.
+        Pinned for now to be at BHmin (:math:`\m_{break}`). 
+    NSmin: float
+        Minimum compact object mass (:math:`m_\min`).
+    NSmax: float
+        Mass at which the notch filter starts (:math:`\gamma_{low}`)
+    BHmin: float
+        Mass at which the notch filter ends (:math:`\gamma_{high}`)
+    BHmax: float
+        Maximum mass in the powerlaw distributed component (:math:`m_\max`).
+    n{0,1,2,3}: float
+        Exponents to set the sharpness of the low mass cutoff, low edge of dip,
+        high edge of dip, and high mass cutoff, respectively (:math:`\eta_i`). 
+    A: float
+        depth of the dip between NSmax and BHmin (A).
+    """
+
+    p_m1 = matter_matters(dataset["mass_1"], A, NSmin, NSmax, BHmin, BHmax, 
+                          n0, n1, n2, n3, mbreak, alpha_1, alpha_2)
+    p_m2 = matter_matters(dataset["mass_2"], A, NSmin, 
+                          NSmax, BHmin, BHmax, n0, n1, n2, n3, mbreak, 
+                          alpha_1, alpha_2)
+    prob = _primary_secondary_plaw_pairing(dataset, p_m1, p_m2, beta_q, mbreak)
+    return prob
+def matter_matters_pairing_binned(dataset, A, NSmin, NSmax,
     BHmin, BHmax, n0, n1, n2, n3, mbreak, alpha_1, alpha_2, beta_q_1, beta_q_2
 ):
     r"""
