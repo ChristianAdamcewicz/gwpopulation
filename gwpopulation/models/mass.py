@@ -245,8 +245,9 @@ def matter_matters_pairing(dataset, A, NSmin, NSmax,
     p_m2 = matter_matters(dataset["mass_2"], A, NSmin, 
                           NSmax, BHmin, BHmax, n0, n1, n2, n3, mbreak, 
                           alpha_1, alpha_2)
-    prob = _primary_secondary_plaw_pairing(dataset, p_m1, p_m2, beta_q, mbreak)
+    prob = _primary_secondary_plaw_pairing(dataset, p_m1, p_m2, beta_q)
     return prob
+
 def matter_matters_pairing_binned(dataset, A, NSmin, NSmax,
     BHmin, BHmax, n0, n1, n2, n3, mbreak, alpha_1, alpha_2, beta_q_1, beta_q_2
 ):
