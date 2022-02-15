@@ -9,7 +9,7 @@ from ..utils import powerlaw, truncnorm
 
 
 def matter_matters(mass, A, NSmin, NSmax, BHmin, BHmax, 
-                   n0, n1, n2, n3, mbreak, alpha_1, alpha_2):
+                   n0, n1, n2, n3, mbreak, mbreak_2, alpha_1, alpha_2):
     r"""
     the single-mass distribution considered in Fishbach, Essick, Holz. Does
     Matter Matter? ApJ Lett 899, 1 (2020) : arXiv:2006.13178
@@ -249,7 +249,8 @@ def matter_matters_pairing(dataset, A, NSmin, NSmax,
     return prob
 
 def matter_matters_pairing_binned(dataset, A, NSmin, NSmax,
-    BHmin, BHmax, n0, n1, n2, n3, mbreak, alpha_1, alpha_2, beta_q_1, beta_q_2
+    BHmin, BHmax, n0, n1, n2, n3, mbreak, mbreak_2, alpha_1, alpha_2,
+    beta_q_1, beta_q_2, beta_q_3
 ):
     r"""
     Two-dimenstional mass distribution considered in Fishbach, Essick, Holz. Does
@@ -284,12 +285,12 @@ def matter_matters_pairing_binned(dataset, A, NSmin, NSmax,
     """
 
     p_m1 = matter_matters(dataset["mass_1"], A, NSmin, NSmax, BHmin, BHmax, 
-                          n0, n1, n2, n3, mbreak, alpha_1, alpha_2)
+                          n0, n1, n2, n3, mbreak, mbreak_2, alpha_1, alpha_2)
     p_m2 = matter_matters(dataset["mass_2"], A, NSmin, 
-                          NSmax, BHmin, BHmax, n0, n1, n2, n3, mbreak, 
-                          alpha_1, alpha_2)
+                          NSmax, BHmin, BHmax, n0, n1, n2, n3, mbreak,
+                          mbreak_2, alpha_1, alpha_2)
     prob = _primary_secondary_mass_binned_pairing(dataset, p_m1, p_m2, beta_q_1,
-    beta_q_2, mbreak)
+    beta_q_2, beta_q_3, mbreak, mbreak_2)
     return prob
 
 def double_power_law_primary_power_law_mass_ratio(
@@ -377,9 +378,13 @@ def _primary_secondary_plaw_pairing(dataset, p_m1, p_m2, beta_pair):
     return _primary_secondary_general(dataset, p_m1, p_m2) * (q ** beta_pair)
 
 def _primary_secondary_mass_binned_pairing(dataset, p_m1, p_m2, beta_pair_1,
-beta_pair_2, mbreak):
+beta_pair_2, beta_pair_3, mbreak, mbreak_2):
     q = dataset["mass_2"]/dataset["mass_1"]
-    beta_pair = xp.where(dataset["mass_2"] < mbreak, beta_pair_1, beta_pair_2)
+    beta_pair = xp.where(dataset["mass_2"] < mbreak, beta_pair_1, 
+                         xp.where(dataset["mass_2"] < mbreak_2, beta_pair_2,
+                                  beta_pair_3)
+                         )
+
     return _primary_secondary_general(dataset, p_m1, p_m2) * (q ** beta_pair)
 
 
