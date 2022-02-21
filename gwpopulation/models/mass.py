@@ -9,7 +9,7 @@ from ..utils import powerlaw, truncnorm
 
 
 def matter_matters(mass, A, NSmin, NSmax, BHmin, BHmax, 
-                   n0, n1, n2, n3, mbreak, mbreak_2, alpha_1, alpha_2):
+                   n0, n1, n2, n3, mbreak, alpha_1, alpha_2):
     r"""
     the single-mass distribution considered in Fishbach, Essick, Holz. Does
     Matter Matter? ApJ Lett 899, 1 (2020) : arXiv:2006.13178
@@ -238,6 +238,8 @@ def matter_matters_pairing(dataset, A, NSmin, NSmax,
         high edge of dip, and high mass cutoff, respectively (:math:`\eta_i`). 
     A: float
         depth of the dip between NSmax and BHmin (A).
+    beta_q: float
+        power law governing mass ratio pairing function.
     """
 
     p_m1 = matter_matters(dataset["mass_1"], A, NSmin, NSmax, BHmin, BHmax, 
@@ -249,8 +251,8 @@ def matter_matters_pairing(dataset, A, NSmin, NSmax,
     return prob
 
 def matter_matters_pairing_binned(dataset, A, NSmin, NSmax,
-    BHmin, BHmax, n0, n1, n2, n3, mbreak, mbreak_2, alpha_1, alpha_2,
-    beta_q_1, beta_q_2, beta_q_3
+    BHmin, BHmax, n0, n1, n2, n3, mbreak_1, mbreak_2, alpha_1, alpha_2,
+    beta_q_1, beta_q_2, beta_q_3, nbins,
 ):
     r"""
     Two-dimenstional mass distribution considered in Fishbach, Essick, Holz. Does
@@ -266,9 +268,6 @@ def matter_matters_pairing_binned(dataset, A, NSmin, NSmax,
         Powerlaw exponent for compact object below break (:math:`\alpha_1`).
     alpha_2: float
         Powerlaw exponent for compact object above break (:math:`\alpha_2`).
-    mbreak: float
-        Mass at which the power law exponent switches from alpha_1 to alpha_2.
-        Pinned for now to be at BHmin (:math:`\m_{break}`). 
     NSmin: float
         Minimum compact object mass (:math:`m_\min`).
     NSmax: float
@@ -282,15 +281,30 @@ def matter_matters_pairing_binned(dataset, A, NSmin, NSmax,
         high edge of dip, and high mass cutoff, respectively (:math:`\eta_i`). 
     A: float
         depth of the dip between NSmax and BHmin (A).
+    beta_q_1: float
+        power law governing mass ratio pairing function at m2<mbreak_1
+    beta_q_2: float
+        power law governing mass ratio pairing function at mbreak_1<m2<mbreak_2
+    beta_q_3: float 
+        power law governing mass ratio pairing function at m2>mbreak_2
+    mbreak_1: float
+        location of upper edge of lowest m2 bin governing the pairing function.
+        See beta_q_1 and beta_q_2.
+    mbreak_2: float
+        location of upper edge of middle m2 bin giverning the pairing function.
+        See beta_q_2 and beta_q_3.
+    nbins: int
+        number of m2 bins for the pairing function. options:2 or 3. If 2,
+        beta_q_3 and mbreak_2 are irrelevant.
     """
 
     p_m1 = matter_matters(dataset["mass_1"], A, NSmin, NSmax, BHmin, BHmax, 
-                          n0, n1, n2, n3, mbreak, mbreak_2, alpha_1, alpha_2)
+                          n0, n1, n2, n3, mbreak_1, alpha_1, alpha_2)
     p_m2 = matter_matters(dataset["mass_2"], A, NSmin, 
-                          NSmax, BHmin, BHmax, n0, n1, n2, n3, mbreak,
-                          mbreak_2, alpha_1, alpha_2)
+                          NSmax, BHmin, BHmax, n0, n1, n2, n3, mbreak_1,
+                          alpha_1, alpha_2)
     prob = _primary_secondary_mass_binned_pairing(dataset, p_m1, p_m2, beta_q_1,
-    beta_q_2, beta_q_3, mbreak, mbreak_2)
+    beta_q_2, beta_q_3, mbreak_1, mbreak_2, nbins)
     return prob
 
 def double_power_law_primary_power_law_mass_ratio(
@@ -378,13 +392,17 @@ def _primary_secondary_plaw_pairing(dataset, p_m1, p_m2, beta_pair):
     return _primary_secondary_general(dataset, p_m1, p_m2) * (q ** beta_pair)
 
 def _primary_secondary_mass_binned_pairing(dataset, p_m1, p_m2, beta_pair_1,
-beta_pair_2, beta_pair_3, mbreak, mbreak_2):
+beta_pair_2, beta_pair_3, mbreak, mbreak_2, nbins):
     q = dataset["mass_2"]/dataset["mass_1"]
-    beta_pair = xp.where(dataset["mass_2"] < mbreak, beta_pair_1, 
-                         xp.where(dataset["mass_2"] < mbreak_2, beta_pair_2,
-                                  beta_pair_3)
-                         )
-
+    if nbins == 2:
+        beta_pair = xp.where(dataset["mass_2"] < mbreak, beta_pair_1, beta_pair_2)
+    elif nbins == 3:
+        beta_pair = xp.where(dataset["mass_2"] < mbreak, beta_pair_1, 
+                             xp.where(dataset["mass_2"] < mbreak_2, beta_pair_2,
+                                      beta_pair_3)
+                             )
+    else:
+        print("only 2 or 3 bin options are supported!")
     return _primary_secondary_general(dataset, p_m1, p_m2) * (q ** beta_pair)
 
 
