@@ -307,6 +307,24 @@ def matter_matters_pairing_binned(dataset, A, NSmin, NSmax,
     beta_q_2, beta_q_3, mbreak_1, mbreak_2, nbins)
     return prob
 
+def matter_matters_pairing_bpl(dataset, A, NSmin, NSmax,
+    BHmin, BHmax, n0, n1, n2, n3, mbreak, alpha_1, alpha_2,
+    beta_q_1, beta_q_2, qbreak):
+
+    p_m1 = matter_matters(dataset["mass_1"], A, NSmin, NSmax, BHmin, BHmax, 
+                          n0, n1, n2, n3, mbreak, alpha_1, alpha_2)
+    p_m2 = matter_matters(dataset["mass_2"], A, NSmin, 
+                          NSmax, BHmin, BHmax, n0, n1, n2, n3, mbreak,
+                          alpha_1, alpha_2)
+    
+    def pairing(q,b1,b2,qbreak):
+        b = xp.where(q < qbreak, b1, b2)
+        return q**b
+
+    prob =  _primary_secondary_general(dataset, p_m1, p_m2) \
+    * pairing(dataset["mass_2"]/dataset["mass_1"],beta_q_1,beta_q_2,qbreak)
+    return prob
+
 def double_power_law_primary_power_law_mass_ratio(
     dataset, alpha_1, alpha_2, beta, mmin, mmax, break_fraction
 ):
@@ -646,6 +664,68 @@ def two_component_primary_secondary_identical(
         mpp=mpp,
         sigpp=sigpp,
     )
+
+class _PairingMassDistribution(object):
+    """
+    Generic mass distribution with a pairing function base class.
+    
+    Implements mass distributions of the form:
+    
+    .. math::
+        p(m_1, m_2) = p_m(m_1) * p_m(m_2) * f_p(q) : m_1 \geq m_2
+    
+    """
+
+    def __init__(self):
+        self.normed = False
+        raise NotImplementedError("This hasn't been tested at all")
+    
+    def __call__(self, dataset, **kwargs):
+        return self.prob(self, dataset, **kwargs)
+
+    def p_m(self, *args, **kwargs):
+        raise NotImplementedError
+
+    def pairing(self, *args, **kwargs):
+        raise NotImplementedError
+
+    def prob(self, dataset, **kwargs):
+        q = dataset["mass_2"]/dataset["mass_1"]
+        # parse arguments for use in pm(m) vs fp(q)
+        pm_args = [k for k, v in 
+                   inspect.signature(self.p_m).parameters.items()
+                   if k not in ["self","mass"]
+                  ]
+        pm_dict = {k: kwargs.pop(k) for k in dict(kwargs) if k in pm_args}
+        
+        fp_args = [k for k, v in 
+                   inspect.signature(self.pairing).parameters.items()
+                   if k not in ["self","mass_ratio"]
+                  ]
+        fp_dict = {k: kwargs.pop(k) for k in dict(kwargs) if k in fp_args}
+        
+        p_m1 = self.p_m(dataset['mass_1'], **pm_dict)
+        p_m2 = self.p_m(dataset['mass_2'], **pm_dict)
+        fp = self.pairing(q, **fp_dict)
+
+        return _primary_secondary_general(dataset, p_m1, p_m2) * fp
+
+class _NotchFilterPairingMassDistribution(_PairingMassDistribution):
+    """
+    Generic pairing function mass distribution with "matter matters" 1D mass
+    model base class.
+    """
+    def p_m(self, mass, A, NSmin, NSmax, BHmin, BHmax, 
+            n0, n1, n2, n3, mbreak, alpha_1, alpha_2):
+        return matter_matters(mass, A, NSmin, NSmax, BHmin, BHmax,
+        n0, n1, n2, n3, mbreak, alpha_1, alpha_2)
+
+class NotchFilterPowerLawPairingMassDistribution(_NotchFilterPairingMassDistribution):
+    """
+    "Power Law + Dip + Break" Model.
+    """
+    def pairing(self, mass_ratio, beta_q):
+        return mass_ratio ** beta_q
 
 
 class _SmoothedMassDistribution(object):
