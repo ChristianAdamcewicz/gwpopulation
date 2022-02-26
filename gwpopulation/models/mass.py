@@ -771,7 +771,8 @@ class NotchFilterTruncatedGaussianPairingMassDistribution(_NotchFilterPairingMas
     """
     def pairing(self, dataset, sigq, meanq, NSmin):
         mass_ratio = dataset["mass_2"]/dataset["mass_1"]
-        raise NotImplementedError
+        return truncnorm(mass_ratio, mu=meanq, sigma=sigq, high=1.,
+            low=dataset["mass_1"]/NSmin)
 
     def __call__(self, dataset, A, NSmin, NSmax, BHmin, BHmax,
             n0, n1, n2, n3, mbreak, alpha_1, alpha_2, 
