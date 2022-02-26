@@ -3,6 +3,7 @@ Implemented mass models
 """
 
 from warnings import warn
+import inspect
 
 from ..cupy_utils import trapz, xp
 from ..utils import powerlaw, truncnorm
@@ -247,7 +248,7 @@ def matter_matters_pairing(dataset, A, NSmin, NSmax,
     p_m2 = matter_matters(dataset["mass_2"], A, NSmin, 
                           NSmax, BHmin, BHmax, n0, n1, n2, n3, mbreak, 
                           alpha_1, alpha_2)
-    prob = _primary_secondary_plaw_pairing(dataset, p_m1, p_m2, beta_q)
+    prob = _primary_secondary_plaw_pairing(dataset, p_m1, p_m2, beta_q, NSmin)
     return prob
 
 def matter_matters_pairing_binned(dataset, A, NSmin, NSmax,
@@ -304,7 +305,7 @@ def matter_matters_pairing_binned(dataset, A, NSmin, NSmax,
                           NSmax, BHmin, BHmax, n0, n1, n2, n3, mbreak_1,
                           alpha_1, alpha_2)
     prob = _primary_secondary_mass_binned_pairing(dataset, p_m1, p_m2, beta_q_1,
-    beta_q_2, beta_q_3, mbreak_1, mbreak_2, nbins)
+    beta_q_2, beta_q_3, mbreak_1, mbreak_2, nbins, NSmin)
     return prob
 
 def matter_matters_pairing_bpl(dataset, A, NSmin, NSmax,
@@ -405,22 +406,33 @@ def power_law_primary_mass_ratio(dataset, alpha, beta, mmin, mmax):
 def _primary_secondary_general(dataset, p_m1, p_m2):
     return p_m1 * p_m2 * (dataset["mass_1"] >= dataset["mass_2"]) * 2
 
-def _primary_secondary_plaw_pairing(dataset, p_m1, p_m2, beta_pair):
+def _primary_secondary_plaw_pairing(dataset, p_m1, p_m2, beta_pair, min_m2):
     q = dataset["mass_2"]/dataset["mass_1"]
-    return _primary_secondary_general(dataset, p_m1, p_m2) * (q ** beta_pair)
+    pairing = powerlaw(q, beta_pair, 1, min_m2 / dataset["mass_1"])
+    return _primary_secondary_general(dataset, p_m1, p_m2) * pairing
 
 def _primary_secondary_mass_binned_pairing(dataset, p_m1, p_m2, beta_pair_1,
-beta_pair_2, beta_pair_3, mbreak, mbreak_2, nbins):
+beta_pair_2, beta_pair_3, mbreak, mbreak_2, nbins, min_m2):
     q = dataset["mass_2"]/dataset["mass_1"]
     if nbins == 2:
         beta_pair = xp.where(dataset["mass_2"] < mbreak, beta_pair_1, beta_pair_2)
+        lower_q_bound = xp.where(dataset["mass_2"] < mbreak,
+            min_m2/dataset["mass_1"], mbreak/dataset["mass_1"])
     elif nbins == 3:
         beta_pair = xp.where(dataset["mass_2"] < mbreak, beta_pair_1, 
                              xp.where(dataset["mass_2"] < mbreak_2, beta_pair_2,
                                       beta_pair_3)
                              )
+        lower_q_bound = xp.where(dataset["mass_2"] < mbreak,
+                                 min_m2/dataset["mass_1"], 
+                                 xp.where(dataset["mass_2"] < mbreak_2, 
+                                          mbreak/dataset["mass_1"],
+                                          mbreak_2/dataset["mass_1"]
+                                         )
+                                 )
     else:
         print("only 2 or 3 bin options are supported!")
+    pairing = powerlaw(q, beta_pair, 1, lower_q_bound)
     return _primary_secondary_general(dataset, p_m1, p_m2) * (q ** beta_pair)
 
 
@@ -678,10 +690,9 @@ class _PairingMassDistribution(object):
 
     def __init__(self):
         self.normed = False
-        raise NotImplementedError("This hasn't been tested at all")
     
     def __call__(self, dataset, **kwargs):
-        return self.prob(self, dataset, **kwargs)
+        raise NotImplementedError
 
     def p_m(self, *args, **kwargs):
         raise NotImplementedError
@@ -689,24 +700,23 @@ class _PairingMassDistribution(object):
     def pairing(self, *args, **kwargs):
         raise NotImplementedError
 
-    def prob(self, dataset, **kwargs):
-        q = dataset["mass_2"]/dataset["mass_1"]
+    def p_m1_m2(self, dataset, **kwargs):
         # parse arguments for use in pm(m) vs fp(q)
         pm_args = [k for k, v in 
                    inspect.signature(self.p_m).parameters.items()
                    if k not in ["self","mass"]
                   ]
-        pm_dict = {k: kwargs.pop(k) for k in dict(kwargs) if k in pm_args}
+        pm_dict = {k: kwargs[k] for k in dict(kwargs) if k in pm_args}
         
         fp_args = [k for k, v in 
                    inspect.signature(self.pairing).parameters.items()
                    if k not in ["self","mass_ratio"]
                   ]
-        fp_dict = {k: kwargs.pop(k) for k in dict(kwargs) if k in fp_args}
+        fp_dict = {k: kwargs[k] for k in dict(kwargs) if k in fp_args}
         
         p_m1 = self.p_m(dataset['mass_1'], **pm_dict)
         p_m2 = self.p_m(dataset['mass_2'], **pm_dict)
-        fp = self.pairing(q, **fp_dict)
+        fp = self.pairing(dataset, **fp_dict)
 
         return _primary_secondary_general(dataset, p_m1, p_m2) * fp
 
@@ -724,9 +734,54 @@ class NotchFilterPowerLawPairingMassDistribution(_NotchFilterPairingMassDistribu
     """
     "Power Law + Dip + Break" Model.
     """
-    def pairing(self, mass_ratio, beta_q):
-        return mass_ratio ** beta_q
+    def pairing(self, dataset, beta_q, NSmin):
+        mass_ratio = dataset["mass_2"]/dataset["mass_1"]
+        return powerlaw(mass_ratio, beta_q, 1, NSmin/dataset["mass_1"])
 
+    def __call__(self, dataset, A, NSmin, NSmax, BHmin, BHmax,
+            n0, n1, n2, n3, mbreak, alpha_1, alpha_2, beta_q
+            ):
+        # get arguments in a dict
+        kwargs = locals()
+        kwargs.pop('self')
+        return self.p_m1_m2(**kwargs)
+
+class NotchFilterBrokenPowerLawPairingMassDistribution(_NotchFilterPairingMassDistribution):
+    """
+    Pairing function is a broken powerlaw in mass ratio
+    """
+    def pairing(self, dataset, beta_q_1, beta_q_2, qbreak, NSmin):
+        mass_ratio = dataset["mass_2"]/dataset["mass_1"]
+        beta_pair = xp.where(mass_ratio < qbreak, beta_q_1, beta_q_2)
+
+        return powerlaw(mass_ratio, beta_pair, 1, NSmin / dataset["mass_1"])
+    
+    def __call__(self, dataset, A, NSmin, NSmax, BHmin, BHmax,
+            n0, n1, n2, n3, mbreak, alpha_1, alpha_2, 
+            beta_q_1, beta_q_2, qbreak
+            ):
+        # get arguments in a dict
+        kwargs = locals()
+        kwargs.pop('self')
+
+class NotchFilterTruncatedGaussianPairingMassDistribution(_NotchFilterPairingMassDistribution):
+    """
+    Pairing function is a gaussian in mass ratio, truncated at q=1 and
+    q=m1/Nsmin
+    """
+    def pairing(self, dataset, sigq, meanq, NSmin):
+        mass_ratio = dataset["mass_2"]/dataset["mass_1"]
+        raise NotImplementedError
+
+    def __call__(self, dataset, A, NSmin, NSmax, BHmin, BHmax,
+            n0, n1, n2, n3, mbreak, alpha_1, alpha_2, 
+            sigq, meanq
+            ):
+        # get arguments in a dict
+        kwargs = locals()
+        kwargs.pop('self')
+        return self.p_m1_m2(**kwargs)
+        return self.p_m1_m2(**kwargs)
 
 class _SmoothedMassDistribution(object):
     """
