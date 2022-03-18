@@ -237,7 +237,9 @@ def power_law_primary_secondary_identical(dataset, alpha, mmin, mmax):
     )
 
 
-def two_component_single(mass, alpha, mmin, mmax, lam, mpp, sigpp):
+def two_component_single(
+    mass, alpha, mmin, mmax, lam, mpp, sigpp, gaussian_mass_maximum=100
+):
     r"""
     Power law model for one-dimensional mass distribution with a Gaussian component.
 
@@ -264,9 +266,11 @@ def two_component_single(mass, alpha, mmin, mmax, lam, mpp, sigpp):
         Mean of the Gaussian component (:math:`\mu_m`).
     sigpp: float
         Standard deviation of the Gaussian component (:math:`\sigma_m`).
+    gaussian_mass_maximum: float, optional
+        Upper truncation limit of the Gaussian component. (default: 100)
     """
     p_pow = powerlaw(mass, alpha=-alpha, high=mmax, low=mmin)
-    p_norm = truncnorm(mass, mu=mpp, sigma=sigpp, high=100, low=mmin)
+    p_norm = truncnorm(mass, mu=mpp, sigma=sigpp, high=gaussian_mass_maximum, low=mmin)
     prob = (1 - lam) * p_pow + lam * p_norm
     return prob
 
