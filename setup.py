@@ -64,7 +64,7 @@ long_description = get_long_description()
 
 setup(
     name="gwpopulation",
-    description="Unified population inference",
+    description="Unified population inference, in /home/hui.tong/projects/spin_model/shanika_version/gwpopulation",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/ColmTalbot/gwpopulation",
