@@ -70,10 +70,17 @@ def powerlaw(xx, alpha, high, low):
     """
     if xp.any(xp.asarray(low) < 0):
         raise ValueError(f"Parameter low must be greater or equal zero, low={low}.")
-    if alpha == -1:
-        norm = 1 / xp.log(high / low)
-    else:
-        norm = (1 + alpha) / (high ** (1 + alpha) - low ** (1 + alpha))
+    try:
+        if alpha == -1:
+            norm = 1 / xp.log(high / low)
+        else:
+            norm = (1 + alpha) / (high ** (1 + alpha) - low ** (1 + alpha))
+    except ValueError:
+        norm = xp.where(alpha==-1,
+                        1 / xp.log(high / low),
+                        (1 + alpha) / (high ** (1 + alpha) - low ** (1 +
+                        alpha))
+                       )
     prob = xp.power(xx, alpha)
     prob *= norm
     prob *= (xx <= high) & (xx >= low)
