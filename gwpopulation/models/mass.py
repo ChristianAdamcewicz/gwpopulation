@@ -793,6 +793,50 @@ class NotchFilterTruncatedGaussianPairingMassDistribution(_NotchFilterPairingMas
         kwargs.pop('self')
         return self.p_m1_m2(**kwargs)
 
+class NotchFilterDoubleGaussianPairingMassDistribution(_NotchFilterPairingMassDistribution):
+    """
+    Pairing function is a mixture of two gaussians in mass ratio, 
+    with mixing fraction `lamq` between the two gaussians.  
+    Both Gaussians are truncated at q=1 and q=`mmax`/`Nsmin`.
+    """
+    def pairing(self, dataset, lamq, sigq_1, meanq_1, sigq_2, meanq_2):
+        mass_ratio = dataset["mass_2"]/dataset["mass_1"]
+        p_g1 = truncnorm(mass_ratio, mu=meanq_1, sigma=sigq_1, high=1.,low=self.qmin)
+        p_g2 = truncnorm(mass_ratio, mu=meanq_2, sigma=sigq_2, high=1.,low=self.qmin)
+        prob = (1 - lamq) * p_g1 + lamq * p_g2
+        return prob
+
+    def __call__(self, dataset, A, NSmin, NSmax, BHmin, BHmax,
+            n0, n1, n2, n3, mbreak, alpha_1, alpha_2, 
+            lamq, sigq_1, meanq_1, sigq_2, meanq_2
+            ):
+        # get arguments in a dict
+        kwargs = locals()
+        kwargs.pop('self')
+        return self.p_m1_m2(**kwargs)
+
+class NotchFilterPowerLawGaussianPairingMassDistribution(_NotchFilterPairingMassDistribution):
+    """
+    Pairing function is a mixture of a powerlaw and a Gaussian in mass ratio, 
+    with mixing fraction `lamq` between the two components.  
+    Both components are truncated at q=1 and q=`mmax`/`Nsmin`.
+    """
+    def pairing(self, dataset, lamq, sigq, meanq, beta_q):
+        mass_ratio = dataset["mass_2"]/dataset["mass_1"]
+        p_g = truncnorm(mass_ratio, mu=meanq, sigma=sigq, high=1.,low=self.qmin)
+        p_pow = powerlaw(mass_ratio, beta_q, 1, self.qmin)
+        prob = (1 - lamq) * p_pow + lamq * p_g
+        return prob
+
+    def __call__(self, dataset, A, NSmin, NSmax, BHmin, BHmax,
+            n0, n1, n2, n3, mbreak, alpha_1, alpha_2, 
+            lamq, sigq, meanq, beta_q
+            ):
+        # get arguments in a dict
+        kwargs = locals()
+        kwargs.pop('self')
+        return self.p_m1_m2(**kwargs)
+
 class _SmoothedMassDistribution(object):
     """
     Generic smoothed mass distribution base class.
