@@ -48,11 +48,11 @@ def iid_spin_magnitude_beta(dataset, amax=1, alpha_chi=1, beta_chi=1, lambda_chi
         Maximum black hole spin.
     """
     return independent_spin_magnitude_beta(
-        dataset, alpha_chi, alpha_chi, beta_chi, beta_chi, amax, amax, lambda_chi_peak, lambda_chi_peak)#, sigma_chi_peak, sigma_chi_peak)
+        dataset, alpha_chi, alpha_chi, beta_chi, beta_chi, amax, amax, lambda_chi_peak)#, sigma_chi_peak, sigma_chi_peak)
 
 
 def independent_spin_magnitude_beta(
-    dataset, alpha_chi_1, alpha_chi_2, beta_chi_1, beta_chi_2, amax_1, amax_2, lambda_chi_peak_1, lambda_chi_peak_2):#, sigma_chi_peak_1, sigma_chi_peak_2):
+    dataset, alpha_chi_1, alpha_chi_2, beta_chi_1, beta_chi_2, amax_1, amax_2, lambda_chi_peak=0):#, sigma_chi_peak_1, sigma_chi_peak_2):
     """Independent beta distributions for both spin magnitudes.
 
     https://arxiv.org/abs/1805.06442 Eq. (10)
@@ -118,6 +118,42 @@ def iid_spin_orientation_gaussian_isotropic(dataset, xi_spin, sigma_spin, zmin):
     return independent_spin_orientation_gaussian_isotropic(
         dataset, xi_spin, sigma_spin, sigma_spin, zmin, zmin
     )
+
+def iiz_spin_orientation_gaussian_isotropic(dataset, xi_spin, sigma_spin, zmin):
+    r"""A mixture model of spin orientations with isotropic and normally
+    distributed components. The distribution of primary and secondary spin
+    orientations are expected to be identical and independent.
+
+    https://arxiv.org/abs/1704.08370 Eq. (4)
+
+    .. math::
+        p(z_1, z_2 | \xi, \sigma) =
+        \frac{(1 - \xi)^2}{4}
+        + \xi \prod_{i\in\{1, 2\}} \mathcal{N}(z_i; \mu=1, \sigma=\sigma, z_\min=-1, z_\max=1)
+
+    Where :math:`\mathcal{N}` is the truncated normal distribution.
+
+    Parameters
+    ----------
+    dataset: dict
+        Dictionary of numpy arrays for 'cos_tilt_1' and 'cos_tilt_2'.
+    xi_spin: float
+        Fraction of black holes in preferentially aligned component (:math:`\xi`).
+    sigma_spin: float
+        Width of preferentially aligned component.
+    """
+    zmin_1 = zmin
+    zmin_2 = zmin
+    sigma_spin_1 = sigma_spin
+    sigma_spin_2 = sigma_spin
+    
+    prior = (1 - xi_spin) / 4 + xi_spin * truncnorm(
+        dataset["cos_tilt_1"], 1, sigma_spin_1, 1, zmin_1
+    ) * truncnorm(dataset["cos_tilt_2"], 1, sigma_spin_2, 1, zmin_2)
+    # bool_arr  = (dataset["cos_tilt_1"] >= zmin_1)*(dataset["cos_tilt_2"] >= zmin_2)
+    # prior[bool_arr == False] = 0
+    
+    return prior
 
 
 def independent_spin_orientation_gaussian_isotropic(dataset, xi_spin, sigma_spin_1, sigma_spin_2, zmin_1, zmin_2):

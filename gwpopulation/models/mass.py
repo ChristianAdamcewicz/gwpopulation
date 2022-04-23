@@ -436,7 +436,9 @@ class _SmoothedMassDistribution(object):
     distribution. Requires p_m1 to be implemented.
     """
 
-    def __init__(self):
+    def __init__(self, mmin=2, mmax=100):
+        self.mmin = mmin
+        self.mmax = mmax
         self.m1s = xp.linspace(2, 100, 1000)
         self.qs = xp.linspace(0.001, 1, 500)
         self.dm = self.m1s[1] - self.m1s[0]
