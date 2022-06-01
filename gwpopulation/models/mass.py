@@ -761,9 +761,23 @@ class NotchFilterBrokenPowerLawPairingMassDistribution(_NotchFilterPairingMassDi
     """
     def pairing(self, dataset, beta_q_1, beta_q_2, qbreak):
         mass_ratio = dataset["mass_2"]/dataset["mass_1"]
-        beta_pair = xp.where(mass_ratio < qbreak, beta_q_1, beta_q_2)
+        prob = xp.zeros_like(mass_ratio)
 
-        return powerlaw(mass_ratio, beta_pair, 1, self.qmin)
+        correction = powerlaw(qbreak, alpha=beta_q_2, low=qbreak, high=1.) / powerlaw(
+            qbreak, alpha=beta_q_1, low=self.qmin, high=qbreak
+        )
+        low_part = powerlaw(mass_ratio[mass_ratio < q_break], alpha=beta_q_1,
+                            low=self.qmin, high=qbreak
+                           )
+        high_part = powerlaw(mass_ratio[mass_ratio >= q_break], alpha=beta_q_2,
+                             low=q_break, high=1.
+                            )
+        prob[mass_ratio < qbreak] = low_part * correction
+        prob[mass_ratio >= qbreak] = high_part
+        return prob / (1 + correction)
+#        beta_pair = xp.where(mass_ratio < qbreak, beta_q_1, beta_q_2)
+#
+#        return powerlaw(mass_ratio, beta_pair, 1, self.qmin)
     
     def __call__(self, dataset, A, NSmin, NSmax, BHmin, BHmax,
             n0, n1, n2, n3, mbreak, alpha_1, alpha_2, 
