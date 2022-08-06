@@ -655,8 +655,8 @@ class CopulaModel(_SmoothedMassDistribution):
         chi_effs = xp.linspace(-1, 1, 500)
         qs_grid_2, chi_effs_grid = xp.meshgrid(self.qs, chi_effs)
         
-        sigma = 10**(log_sigma_chi_eff + sigma_chi_eff_cor * (qs_grid_2 - 0.5))
-        mu = mu_chi_eff + mu_chi_eff_cor * (qs_grid_2 - 0.5)
+        sigma = 10**(log_sigma_chi_eff + beta_cal * (qs_grid_2 - 0.5))
+        mu = mu_chi_eff + alpha_cal * (qs_grid_2 - 0.5)
 
         p_chi_eff = truncnorm(chi_effs_grid, mu=mu, sigma=sigma, low=-1, high=1)
         p_chi_eff = xp.nan_to_num(p_chi_eff)
