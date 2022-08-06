@@ -4,8 +4,8 @@ Implemented mass models
 
 from warnings import warn
 
-from ..cupy_utils import trapz, xp
-from ..utils import powerlaw, truncnorm
+from ..cupy_utils import trapz, xp, cumtrapz 
+from ..utils import powerlaw, truncnorm, frank_copula 
 
 
 def double_power_law_primary_mass(mass, alpha_1, alpha_2, mmin, mmax, break_fraction):
@@ -521,6 +521,166 @@ class _SmoothedMassDistribution(object):
                 window[smoothing_region] = 1 / (xp.exp(exponent) + 1)
         window[(masses < mmin) | (masses > mmax)] = 0
         return window
+
+
+class CopulaModel(_SmoothedMassDistribution):
+    def __call__(self,  dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m,
+                 mu_chi_eff, log_sigma_chi_eff, alpha_cal, beta_cal, kappa_cop):
+        """
+        Copula model for correlating mass ratio and effective inspiral spin.
+
+        Powerlaw + peak model for two-dimensional mass distribution with low
+        mass smoothing: https://arxiv.org/abs/1801.02699 Eq. (11) (T&T18).
+        
+        Marginal effective inspiral spin distribution mimicking 
+        https://arxiv.org/abs/2106.00521 (Callister+).
+
+        Correlates using Frank copula density function.
+
+        Parameters
+        ----------
+        dataset: dict
+            Dictionary of numpy arrays for 'mass_1' and 'mass_ratio'.
+        alpha: float
+            Powerlaw exponent for more massive black hole.
+        beta: float
+            Power law exponent of the mass ratio distribution.
+        mmin: float
+            Minimum black hole mass.
+        mmax: float
+            Maximum mass in the powerlaw distributed component.
+        lam: float
+            Fraction of black holes in the Gaussian component.
+        mpp: float
+            Mean of the Gaussian component.
+        sigpp: float
+            Standard deviation fo the Gaussian component.
+        delta_m: float
+            Rise length of the low end of the mass distribution.
+        mu_chi_eff: float
+            Mean of chi_eff distribution.
+        log_sigma_chi_eff: float
+            Log of standard deviation in chi_eff_distribution.
+        alpha_cal: float
+            Reshapes chi_eff distribution.
+        beta_cal: float
+            Reshapes chi_eff distribution.
+        kappa_cop: float
+            Controls level of correlation in copula.
+        """
+        p_m1 = self.p_m1(
+            dataset,
+            alpha=alpha,
+            mmin=mmin,
+            mmax=mmax,
+            lam=lam,
+            mpp=mpp,
+            sigpp=sigpp,
+            delta_m=delta_m,
+        )
+        p_q = self.p_q(dataset, beta=beta, mmin=mmin, delta_m=delta_m)
+        p_chi_eff, u, v = self.copula(dataset, alpha, mmin, mmax, lam, mpp, sigpp, delta_m,
+                                      beta, mu_chi_eff, log_sigma_chi_eff, alpha_cal, beta_cal)
+        prob = p_m1 * p_q * p_chi_eff
+        prob *= frank_copula(u, v, kapp_cop)
+        return prob
+
+    def p_m1(self, dataset, alpha, mmin, mmax, lam, mpp, sigpp, delta_m):
+        p_m = two_component_single(
+            dataset["mass_1"],
+            alpha=alpha,
+            mmin=mmin,
+            mmax=mmax,
+            lam=lam,
+            mpp=mpp,
+            sigpp=sigpp,
+        )
+        p_m *= self.smoothing(dataset["mass_1"], mmin=mmin, mmax=100, delta_m=delta_m)
+        norm = self.norm_p_m1(
+            alpha=alpha,
+            mmin=mmin,
+            mmax=mmax,
+            lam=lam,
+            mpp=mpp,
+            sigpp=sigpp,
+            delta_m=delta_m,
+        )
+        return p_m / norm
+
+    def norm_p_m1(self, alpha, mmin, mmax, lam, mpp, sigpp, delta_m):
+        """Calculate the normalisation factor for the primary mass"""
+        if delta_m == 0.0:
+            return 1
+        p_m = two_component_single(
+            self.m1s, alpha=alpha, mmin=mmin, mmax=mmax, lam=lam, mpp=mpp, sigpp=sigpp
+        )
+        p_m *= self.smoothing(self.m1s, mmin=mmin, mmax=100, delta_m=delta_m)
+
+        norm = trapz(p_m, self.m1s)
+        return norm
+
+    def copula(dataset, alpha, mmin, mmax, lam, mpp, sigpp, delta_m,                                                                                                                       beta, mu_chi_eff, log_sigma_chi_eff, alpha_cal, beta_cal):
+        # p(m1) grid
+        p_m = two_component_single(
+            self.m1s, alpha=alpha, mmin=mmin, mmax=mmax, lam=lam, mpp=mpp, sigpp=sigpp)
+        p_m *= self.smoothing(self.m1s, mmin=mmin, mmax=100, delta_m=delta_m)
+        p_m_norm = trapz(p_m, self.m1s)
+        p_m /= p_m_norm
+        p_m = xp.nan_to_num(p_m)
+
+        # p(q|m1) grid
+        p_q = powerlaw(self.qs_grid, beta, 1, mmin / self.m1s_grid)
+        p_q *= self.smoothing(
+            self.m1s_grid * self.qs_grid, mmin=mmin, mmax=self.m1s_grid, delta_m=delta_m)
+        p_q_norm = trapz(p_q, self.qs, axis=0)
+        p_q /= p_q_norm
+        p_q = xp.nan_to_num(p_q)
+
+        # p(q) grid
+        integrand_q_m = p_q * p_m
+        p_q_marg = trapz(integrand_q_m, self.m1s, axis=-1)
+        p_q_marg_norm = trapz(p_q_marg, self.qs)
+        p_q_marg /= p_q_marg_norm 
+        p_q_marg = xp.nan_to_num(p_q_marg)
+
+        # u(q) grid
+        u = cumtrapz(p_q_marg, self.qs, initial=0)
+        u /= xp.max(u)
+        u = xp.nan_to_num(u)
+
+        # Interpolate for u(q)
+        res_u = xp.interp(dataset["mass_ratio"], self.qs, u)
+
+        # p(chi_eff|q) grid
+        chi_effs = xp.linspace(-1, 1, 500)
+        qs_grid_2, chi_effs_grid = xp.meshgrid(self.qs, chi_effs)
+        
+        sigma = 10**(log_sigma_chi_eff + sigma_chi_eff_cor * (qs_grid_2 - 0.5))
+        mu = mu_chi_eff + mu_chi_eff_cor * (qs_grid_2 - 0.5)
+
+        p_chi_eff = truncnorm(chi_effs_grid, mu=mu, sigma=sigma, low=-1, high=1)
+        p_chi_eff = xp.nan_to_num(p_chi_eff)
+
+        # p(chi_eff) grid
+        integrand_chi_eff_q = p_chi_eff * p_q_marg
+        p_chi_eff_marg = trapz(integrand_chi_eff_q, self.qs, axis=-1)
+
+        p_chi_eff_marg_norm = trapz(p_chi_eff_marg, chi_effs)
+        p_chi_eff_marg /= p_chi_eff_marg_norm
+        p_chi_eff_marg = xp.nan_to_num(p_chi_eff_marg)
+
+        # Interpolate for p(chi_eff)
+        res_p_chi_eff = xp.interp(dataset["chi_eff"], chi_effs, p_chi_eff_marg)
+
+        # v(chi_eff) grid
+        v = cumtrapz(p_chi_eff_marg, chi_effs, initial=0)
+        v /= xp.max(v)
+        v = xp.nan_to_num(v)
+
+        # Interpolate for v(chi_eff)
+        res_v = xp.interp(dataset["chi_eff"], chi_effs, v)
+
+        return res_p_chi_eff, res_u, res_v 
 
 
 class SinglePeakSmoothedMassDistribution(_SmoothedMassDistribution):

@@ -6,50 +6,41 @@ from ..cupy_utils import xp
 from ..utils import beta_dist, truncnorm, unnormalized_2d_gaussian
 
 
-def iid_spin(dataset, xi_spin, sigma_spin, amax, alpha_chi, beta_chi, lambda_chi_peak, sigma_chi_peak):
+def iid_spin(dataset):
     r"""
-    Independently and identically distributed spins.
-    The magnitudes are assumed to follow a Beta distribution and the
-    orientations are assumed to follow an isotropic + truncated half
-    Gaussian mixture model.
+    !OVERWRITTEN!
+
+    Calls iid_spin_magnitude_beta function.
 
     Parameters
     ----------
     dataset: dict
-        Dictionary of numpy arrays containing 'a_1' and 'a_2'.
-    xi_spin: float
-        Fraction of black holes in preferentially aligned component.
-    sigma_spin: float
-        Width of preferentially aligned component.
-    alpha_chi, beta_chi: float
-        Parameters of Beta distribution for both black holes.
-    amax: float
-        Maximum black hole spin.
+        Dictionary of numpy arrays containing 'mass_ratio' and 'chi_eff'.
     """
-    prior = iid_spin_orientation_gaussian_isotropic(
-        dataset, xi_spin, sigma_spin
-    ) * iid_spin_magnitude_beta(dataset, amax, alpha_chi, beta_chi, lambda_chi_peak, sigma_chi_peak)
+    prior = iid_spin_magnitude_beta(dataset)
     return prior
 
 
-def iid_spin_magnitude_beta(dataset, amax=1, alpha_chi=1, beta_chi=1, lambda_chi_peak=0, sigma_chi_peak=0.04):
-    """Independent and identically distributed beta distributions for both spin magnitudes.
+def iid_spin_magnitude_beta(dataset):
+    """
+    !OVERWRITTEN!
 
-    https://arxiv.org/abs/1805.06442 Eq. (10)
-    https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.beta.html
+    Reapplies uniform fiducial priors for chi_1, chi_2, cos_t_1, cos_t_2
+    and undoes corresponding fiducial prior for chi_eff.
 
     Parameters
     ----------
     dataset: dict
-        Dictionary of numpy arrays containing 'a_1' and 'a_2'.
-    alpha_chi, beta_chi: float
-        Parameters of Beta distribution for both black holes.
-    amax: float
-        Maximum black hole spin.
+        Dictionary of numpy arrays containing 'mass_ratio' and 'chi_eff'.
     """
-    return independent_spin_magnitude_beta(
-        dataset, alpha_chi, alpha_chi, beta_chi, beta_chi, amax, amax, lambda_chi_peak, lambda_chi_peak, sigma_chi_peak, sigma_chi_peak
-    )
+    if "chi_eff_prior" not in dataset.keys():
+        dataset["chi_eff_prior"] = chi_effective_prior_from_isotropic_spins(dataset["mass_ratio"], 1., dataset["chi_eff"])
+
+    old_prior = 1/4
+
+    prior = old_prior / dataset["chi_eff_prior"]
+
+    return prior
 
 
 def independent_spin_magnitude_beta(
