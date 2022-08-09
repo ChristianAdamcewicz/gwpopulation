@@ -3,7 +3,7 @@ Implemented spin models
 """
 
 from ..cupy_utils import xp
-from ..utils import beta_dist, truncnorm, unnormalized_2d_gaussian
+from ..utils import beta_dist, truncnorm, unnormalized_2d_gaussian, chi_effective_prior_from_isotropic_spins
 
 
 def iid_spin(dataset):

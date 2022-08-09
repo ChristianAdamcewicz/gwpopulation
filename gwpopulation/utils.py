@@ -109,14 +109,12 @@ def truncnorm(xx, mu, sigma, high, low):
         The distribution evaluated at `xx`
 
     """
-    if sigma <= 0:
-        raise ValueError(f"Sigma must be greater than 0, sigma={sigma}")
     norm = 2 ** 0.5 / xp.pi ** 0.5 / sigma
     norm /= erf((high - mu) / 2 ** 0.5 / sigma) + erf((mu - low) / 2 ** 0.5 / sigma)
     prob = xp.exp(-xp.power(xx - mu, 2) / (2 * sigma ** 2))
     prob *= norm
     prob *= (xx <= high) & (xx >= low)
-    return prob
+    return xp.nan_to_num(prob)
 
 
 def unnormalized_2d_gaussian(xx, yy, mu_x, mu_y, sigma_x, sigma_y, covariance):

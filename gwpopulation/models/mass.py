@@ -582,7 +582,7 @@ class CopulaModel(_SmoothedMassDistribution):
         p_chi_eff, u, v = self.copula(dataset, alpha, mmin, mmax, lam, mpp, sigpp, delta_m,
                                       beta, mu_chi_eff, log_sigma_chi_eff, alpha_cal, beta_cal)
         prob = p_m1 * p_q * p_chi_eff
-        prob *= frank_copula(u, v, kapp_cop)
+        prob *= frank_copula(u, v, kappa_cop)
         return prob
 
     def p_m1(self, dataset, alpha, mmin, mmax, lam, mpp, sigpp, delta_m):
@@ -619,7 +619,8 @@ class CopulaModel(_SmoothedMassDistribution):
         norm = trapz(p_m, self.m1s)
         return norm
 
-    def copula(dataset, alpha, mmin, mmax, lam, mpp, sigpp, delta_m,                                                                                                                       beta, mu_chi_eff, log_sigma_chi_eff, alpha_cal, beta_cal):
+    def copula(self, dataset, alpha, mmin, mmax, lam, mpp, sigpp, delta_m, 
+               beta, mu_chi_eff, log_sigma_chi_eff, alpha_cal, beta_cal):
         # p(m1) grid
         p_m = two_component_single(
             self.m1s, alpha=alpha, mmin=mmin, mmax=mmax, lam=lam, mpp=mpp, sigpp=sigpp)
