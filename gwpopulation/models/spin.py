@@ -79,32 +79,13 @@ def independent_spin_magnitude_beta(
     return prior
 
 
-def iid_spin_orientation_gaussian_isotropic(dataset, xi_spin, sigma_spin, zmin):
-    r"""A mixture model of spin orientations with isotropic and normally
-    distributed components. The distribution of primary and secondary spin
-    orientations are expected to be identical and independent.
-
-    https://arxiv.org/abs/1704.08370 Eq. (4)
-
-    .. math::
-        p(z_1, z_2 | \xi, \sigma) =
-        \frac{(1 - \xi)^2}{4}
-        + \xi \prod_{i\in\{1, 2\}} \mathcal{N}(z_i; \mu=1, \sigma=\sigma, z_\min=-1, z_\max=1)
-
-    Where :math:`\mathcal{N}` is the truncated normal distribution.
-
-    Parameters
-    ----------
-    dataset: dict
-        Dictionary of numpy arrays for 'cos_tilt_1' and 'cos_tilt_2'.
-    xi_spin: float
-        Fraction of black holes in preferentially aligned component (:math:`\xi`).
-    sigma_spin: float
-        Width of preferentially aligned component.
+def iid_spin_orientation_gaussian_isotropic(dataset):
+    r"""
+    !Overwritten!
+    
+    Does nothing.
     """
-    return independent_spin_orientation_gaussian_isotropic(
-        dataset, xi_spin, sigma_spin, sigma_spin, zmin, zmin
-    )
+    return 1.
 
 
 def independent_spin_orientation_gaussian_isotropic(dataset, xi_spin, sigma_spin_1, sigma_spin_2, zmin_1, zmin_2):
