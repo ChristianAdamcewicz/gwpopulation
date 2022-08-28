@@ -31,6 +31,46 @@ def iid_spin(dataset, xi_spin, sigma_spin, amax, alpha_chi, beta_chi, lambda_chi
     ) * iid_spin_magnitude_beta(dataset, amax, alpha_chi, beta_chi, lambda_chi_peak, sigma_chi_peak)
     return prior
 
+def narrow_Gaussian_iid_spin_magnitude_beta(dataset, amax=1, alpha_chi=1, beta_chi=1, lambda_chi_peak=0):#, sigma_chi_peak=0.04):
+    """Independent and identically distributed beta+Gaussain distributions for both spin magnitudes.
+
+    https://arxiv.org/abs/1805.06442 Eq. (10)
+    https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.beta.html
+
+    Parameters
+    ----------
+    dataset: dict
+        Dictionary of numpy arrays containing 'a_1' and 'a_2'.
+    alpha_chi, beta_chi: float
+        Parameters of Beta distribution for both black holes.
+    amax: float
+        Maximum black hole spin.
+    """
+    
+    return narrow_Gaussian_ind_spin_magnitude_beta(
+        dataset, alpha_chi, alpha_chi, beta_chi, beta_chi, amax, amax, lambda_chi_peak)#, sigma_chi_peak, sigma_chi_peak)
+
+
+def narrow_Gaussian_ind_spin_magnitude_beta(dataset, alpha_chi_1, alpha_chi_2, beta_chi_1, beta_chi_2, amax_1, amax_2, lambda_chi_peak=0): #, sigma_chi_peak=0.04):
+    """Independent and identically distributed beta+Gaussain distributions for both spin magnitudes.
+
+    https://arxiv.org/abs/1805.06442 Eq. (10)
+    https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.beta.html
+
+    Parameters
+    ----------
+    dataset: dict
+        Dictionary of numpy arrays containing 'a_1' and 'a_2'.
+    alpha_chi, beta_chi: float
+        Parameters of Beta distribution for both black holes.
+    amax: float
+        Maximum black hole spin.
+    """
+    
+    return (1-lambda_chi_peak)*independent_spin_magnitude_beta(
+        dataset, alpha_chi, alpha_chi, beta_chi, beta_chi, amax, amax, lambda_chi_peak) + lambda_chi_peak * truncnorm(dataset["a_1"], mu=0, sigma=0.1, high=1, low=0)*truncnorm(dataset["a_2"], mu=0, sigma=0.1, high=1, low=0)#, sigma_chi_peak, sigma_chi_peak)
+
+
 
 def iid_spin_magnitude_beta(dataset, amax=1, alpha_chi=1, beta_chi=1, lambda_chi_peak=0):#, sigma_chi_peak=0.04):
     """Independent and identically distributed beta distributions for both spin magnitudes.
