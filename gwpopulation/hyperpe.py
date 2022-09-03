@@ -169,9 +169,9 @@ class HyperparameterLikelihood(Likelihood):
     def log_likelihood_ratio(self):
         ln_l, variance = self.ln_likelihood_and_variance()
         if variance > self._max_variance:
-            self._pop_added(added_keys)
+            # self._pop_added(added_keys)
             return -self._inf
-        self._pop_added(added_keys)
+        # self._pop_added(added_keys)
         if xp.isnan(ln_l):
             return float(-INF)
         else:
@@ -196,16 +196,16 @@ class HyperparameterLikelihood(Likelihood):
 
     def _compute_per_event_ln_bayes_factors(self, return_uncertainty=True):
         weights_1 = self.hyper_prior1.prob(self.data1) / self.sampling_prior1
-        weights_2 = self.hyper_prior1.prob(self.data2) / self.sampling_prior2
+        weights_2 = self.hyper_prior2.prob(self.data2) / self.sampling_prior2
         expectation_1 = xp.mean(weights_1, axis=-1)
         expectation_2 = xp.mean(weights_2, axis=-1)
         if return_uncertainty:
             square_expectation_1 = xp.mean(weights_1**2, axis=-1)
             square_expectation_2 = xp.mean(weights_2**2, axis=-1)
             numerator_1 = (1. - self.parameters["lambda_chi_peak"])** 2 * (
-                square_expectation_1 - expectation_1 ** 2 ) / self.samples_per_posterior_1 
+                square_expectation_1 - expectation_1 ** 2 ) / self.samples_per_posterior1 
             numerator_2 = self.parameters["lambda_chi_peak"]** 2 * (
-                square_expectation_2 - expectation_2 ** 2 ) / self.samples_per_posterior_1
+                square_expectation_2 - expectation_2 ** 2 ) / self.samples_per_posterior2
             
             denominator=( (1. - self.parameters["lambda_chi_peak"]) * expectation_1 + self.parameters["lambda_chi_peak"] * expectation_2 ) ** 2
             variance = (numerator_1 + numerator_2) / denominator

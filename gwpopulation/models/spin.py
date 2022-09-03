@@ -68,7 +68,7 @@ def narrow_Gaussian_ind_spin_magnitude_beta(dataset, alpha_chi_1, alpha_chi_2, b
     """
     
     return (1-lambda_chi_peak)*independent_spin_magnitude_beta(
-        dataset, alpha_chi, alpha_chi, beta_chi, beta_chi, amax, amax, lambda_chi_peak) + lambda_chi_peak * truncnorm(dataset["a_1"], mu=0, sigma=0.1, high=1, low=0)*truncnorm(dataset["a_2"], mu=0, sigma=0.1, high=1, low=0)#, sigma_chi_peak, sigma_chi_peak)
+        dataset, alpha_chi_1, alpha_chi_2, beta_chi_1, beta_chi_2, amax_1, amax_2, lambda_chi_peak) + lambda_chi_peak * truncnorm(dataset["a_1"], mu=0, sigma=0.2, high=1, low=0)*truncnorm(dataset["a_2"], mu=0, sigma=0.2, high=1, low=0)#, sigma_chi_peak, sigma_chi_peak)
 
 
 
