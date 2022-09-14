@@ -523,11 +523,11 @@ class _SmoothedMassDistribution(object):
         return window
 
 
-class CopulaModel(_SmoothedMassDistribution):
+class CopulaModel(SinglePeakSmoothedMassDistribution):
     def __call__(self,  dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m,
                  mu_chi_eff, log_sigma_chi_eff, alpha_cal, beta_cal, kappa_cop):
         """
-        Copula model for correlating mass ratio and effective inspiral spin.
+        Adds copula model for correlating mass ratio and effective inspiral spin.
 
         Powerlaw + peak model for two-dimensional mass distribution with low
         mass smoothing: https://arxiv.org/abs/1801.02699 Eq. (11) (T&T18).
@@ -568,59 +568,25 @@ class CopulaModel(_SmoothedMassDistribution):
         kappa_cop: float
             Controls level of correlation in copula.
         """
-        p_m1 = self.p_m1(
-            dataset,
+        prob = super(CopulaModel, self).__call__(
+            dataset=dataset,
             alpha=alpha,
+            beta=beta,
             mmin=mmin,
             mmax=mmax,
             lam=lam,
             mpp=mpp,
             sigpp=sigpp,
-            delta_m=delta_m,
+            delta_m=delta_m
         )
-        p_q = self.p_q(dataset, beta=beta, mmin=mmin, delta_m=delta_m)
-        p_chi_eff, u, v = self.copula(dataset, alpha, mmin, mmax, lam, mpp, sigpp, delta_m,
-                                      beta, mu_chi_eff, log_sigma_chi_eff, alpha_cal, beta_cal)
-        prob = p_m1 * p_q * p_chi_eff
+        p_chi_eff, u, v = self.copula_coords(dataset, alpha, mmin, mmax, lam, mpp, sigpp, delta_m,
+                                             beta, mu_chi_eff, log_sigma_chi_eff, alpha_cal, beta_cal)
+        prob *= p_chi_eff
         prob *= frank_copula(u, v, kappa_cop)
         return prob
 
-    def p_m1(self, dataset, alpha, mmin, mmax, lam, mpp, sigpp, delta_m):
-        p_m = two_component_single(
-            dataset["mass_1"],
-            alpha=alpha,
-            mmin=mmin,
-            mmax=mmax,
-            lam=lam,
-            mpp=mpp,
-            sigpp=sigpp,
-        )
-        p_m *= self.smoothing(dataset["mass_1"], mmin=mmin, mmax=100, delta_m=delta_m)
-        norm = self.norm_p_m1(
-            alpha=alpha,
-            mmin=mmin,
-            mmax=mmax,
-            lam=lam,
-            mpp=mpp,
-            sigpp=sigpp,
-            delta_m=delta_m,
-        )
-        return p_m / norm
-
-    def norm_p_m1(self, alpha, mmin, mmax, lam, mpp, sigpp, delta_m):
-        """Calculate the normalisation factor for the primary mass"""
-        if delta_m == 0.0:
-            return 1
-        p_m = two_component_single(
-            self.m1s, alpha=alpha, mmin=mmin, mmax=mmax, lam=lam, mpp=mpp, sigpp=sigpp
-        )
-        p_m *= self.smoothing(self.m1s, mmin=mmin, mmax=100, delta_m=delta_m)
-
-        norm = trapz(p_m, self.m1s)
-        return norm
-
-    def copula(self, dataset, alpha, mmin, mmax, lam, mpp, sigpp, delta_m, 
-               beta, mu_chi_eff, log_sigma_chi_eff, alpha_cal, beta_cal):
+    def copula_coords(self, dataset, alpha, mmin, mmax, lam, mpp, sigpp, delta_m, 
+                      beta, mu_chi_eff, log_sigma_chi_eff, alpha_cal, beta_cal):
         # p(m1) grid
         p_m = two_component_single(
             self.m1s, alpha=alpha, mmin=mmin, mmax=mmax, lam=lam, mpp=mpp, sigpp=sigpp)
