@@ -523,6 +523,89 @@ class _SmoothedMassDistribution(object):
         return window
 
 
+class SinglePeakSmoothedMassDistribution(_SmoothedMassDistribution):
+    def __call__(self, dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m):
+        """
+        Powerlaw + peak model for two-dimensional mass distribution with low
+        mass smoothing.
+
+        https://arxiv.org/abs/1801.02699 Eq. (11) (T&T18)
+
+        Parameters
+        ----------
+        dataset: dict
+            Dictionary of numpy arrays for 'mass_1' and 'mass_ratio'.
+        alpha: float
+            Powerlaw exponent for more massive black hole.
+        beta: float
+            Power law exponent of the mass ratio distribution.
+        mmin: float
+            Minimum black hole mass.
+        mmax: float
+            Maximum mass in the powerlaw distributed component.
+        lam: float
+            Fraction of black holes in the Gaussian component.
+        mpp: float
+            Mean of the Gaussian component.
+        sigpp: float
+            Standard deviation fo the Gaussian component.
+        delta_m: float
+            Rise length of the low end of the mass distribution.
+
+        Notes
+        -----
+        The interpolation of the p(q) normalisation has a fill value of
+        the normalisation factor for m_1 = 100.
+        """
+        p_m1 = self.p_m1(
+            dataset,
+            alpha=alpha,
+            mmin=mmin,
+            mmax=mmax,
+            lam=lam,
+            mpp=mpp,
+            sigpp=sigpp,
+            delta_m=delta_m,
+        )
+        p_q = self.p_q(dataset, beta=beta, mmin=mmin, delta_m=delta_m)
+        prob = p_m1 * p_q
+        return prob
+
+    def p_m1(self, dataset, alpha, mmin, mmax, lam, mpp, sigpp, delta_m):
+        p_m = two_component_single(
+            dataset["mass_1"],
+            alpha=alpha,
+            mmin=mmin,
+            mmax=mmax,
+            lam=lam,
+            mpp=mpp,
+            sigpp=sigpp,
+        )
+        p_m *= self.smoothing(dataset["mass_1"], mmin=mmin, mmax=100, delta_m=delta_m)
+        norm = self.norm_p_m1(
+            alpha=alpha,
+            mmin=mmin,
+            mmax=mmax,
+            lam=lam,
+            mpp=mpp,
+            sigpp=sigpp,
+            delta_m=delta_m,
+        )
+        return p_m / norm
+
+    def norm_p_m1(self, alpha, mmin, mmax, lam, mpp, sigpp, delta_m):
+        """Calculate the normalisation factor for the primary mass"""
+        if delta_m == 0.0:
+            return 1
+        p_m = two_component_single(
+            self.m1s, alpha=alpha, mmin=mmin, mmax=mmax, lam=lam, mpp=mpp, sigpp=sigpp
+        )
+        p_m *= self.smoothing(self.m1s, mmin=mmin, mmax=100, delta_m=delta_m)
+
+        norm = trapz(p_m, self.m1s)
+        return norm
+
+    
 class CopulaModel(SinglePeakSmoothedMassDistribution):
     def __call__(self,  dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m,
                  mu_chi_eff, log_sigma_chi_eff, alpha_cal, beta_cal, kappa_cop):
@@ -648,89 +731,6 @@ class CopulaModel(SinglePeakSmoothedMassDistribution):
         res_v = xp.interp(dataset["chi_eff"], chi_effs, v)
 
         return res_p_chi_eff, res_u, res_v 
-
-
-class SinglePeakSmoothedMassDistribution(_SmoothedMassDistribution):
-    def __call__(self, dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m):
-        """
-        Powerlaw + peak model for two-dimensional mass distribution with low
-        mass smoothing.
-
-        https://arxiv.org/abs/1801.02699 Eq. (11) (T&T18)
-
-        Parameters
-        ----------
-        dataset: dict
-            Dictionary of numpy arrays for 'mass_1' and 'mass_ratio'.
-        alpha: float
-            Powerlaw exponent for more massive black hole.
-        beta: float
-            Power law exponent of the mass ratio distribution.
-        mmin: float
-            Minimum black hole mass.
-        mmax: float
-            Maximum mass in the powerlaw distributed component.
-        lam: float
-            Fraction of black holes in the Gaussian component.
-        mpp: float
-            Mean of the Gaussian component.
-        sigpp: float
-            Standard deviation fo the Gaussian component.
-        delta_m: float
-            Rise length of the low end of the mass distribution.
-
-        Notes
-        -----
-        The interpolation of the p(q) normalisation has a fill value of
-        the normalisation factor for m_1 = 100.
-        """
-        p_m1 = self.p_m1(
-            dataset,
-            alpha=alpha,
-            mmin=mmin,
-            mmax=mmax,
-            lam=lam,
-            mpp=mpp,
-            sigpp=sigpp,
-            delta_m=delta_m,
-        )
-        p_q = self.p_q(dataset, beta=beta, mmin=mmin, delta_m=delta_m)
-        prob = p_m1 * p_q
-        return prob
-
-    def p_m1(self, dataset, alpha, mmin, mmax, lam, mpp, sigpp, delta_m):
-        p_m = two_component_single(
-            dataset["mass_1"],
-            alpha=alpha,
-            mmin=mmin,
-            mmax=mmax,
-            lam=lam,
-            mpp=mpp,
-            sigpp=sigpp,
-        )
-        p_m *= self.smoothing(dataset["mass_1"], mmin=mmin, mmax=100, delta_m=delta_m)
-        norm = self.norm_p_m1(
-            alpha=alpha,
-            mmin=mmin,
-            mmax=mmax,
-            lam=lam,
-            mpp=mpp,
-            sigpp=sigpp,
-            delta_m=delta_m,
-        )
-        return p_m / norm
-
-    def norm_p_m1(self, alpha, mmin, mmax, lam, mpp, sigpp, delta_m):
-        """Calculate the normalisation factor for the primary mass"""
-        if delta_m == 0.0:
-            return 1
-        p_m = two_component_single(
-            self.m1s, alpha=alpha, mmin=mmin, mmax=mmax, lam=lam, mpp=mpp, sigpp=sigpp
-        )
-        p_m *= self.smoothing(self.m1s, mmin=mmin, mmax=100, delta_m=delta_m)
-
-        norm = trapz(p_m, self.m1s)
-        return norm
 
 
 class SmoothedMassDistribution(SinglePeakSmoothedMassDistribution):
