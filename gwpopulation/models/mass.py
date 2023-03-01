@@ -1058,7 +1058,7 @@ class _SmoothedMassDistribution(object):
 class SinglePeakSmoothedPairingMassDistribution(_SmoothedMassDistribution,
                                                 _IdenticalPairingMassDistribution):
     def __init__(self,mmin=2.0, mmax=100.):
-        _PairingMassDistribution.__init__(self,mmin=mmin,mmax=mmax)
+        _IdenticalPairingMassDistribution.__init__(self,mmin=mmin,mmax=mmax)
         _SmoothedMassDistribution.__init__(self)
 
     def pairing(self, dataset, beta_q):
