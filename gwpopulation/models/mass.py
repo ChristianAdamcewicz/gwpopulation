@@ -686,6 +686,66 @@ class _PairingMassDistribution(object):
     Implements mass distributions of the form:
     
     .. math::
+        p(m_1, m_2) = p_1(m_1) * p_2(m_2) * f_p(q) : m_1 \geq m_2
+    
+    """
+    def __init__(self, mmin=0.5, mmax=350.):
+        self.mmin = mmin
+        self.mmax = mmax
+        self.qmin = mmin/mmax
+    
+    def __call__(self, dataset, **kwargs):
+        raise NotImplementedError
+
+    def p1_m1(self, *args, **kwargs):
+        raise NotImplementedError
+    
+    def p2_m2(self, *args, **kwargs):
+        raise NotImplementedError
+
+    def pairing(self, *args, **kwargs):
+        raise NotImplementedError
+
+    def p_m1_m2(self, dataset, **kwargs):
+        # parse arguments for use in pm(m) vs fp(q)
+        pm1_args = [k for k, v in 
+                   inspect.signature(self.p1_m1).parameters.items()
+                   if k not in ["self","mass"]
+                  ]
+        pm1_dict = {k: kwargs[k] for k in dict(kwargs) if k in pm1_args}
+        
+        pm2_args = [k for k, v in 
+                   inspect.signature(self.p2_m2).parameters.items()
+                   if k not in ["self","mass"]
+                  ]
+        pm2_dict = {k: kwargs[k] for k in dict(kwargs) if k in pm2_args}
+        
+        fp_args = [k for k, v in 
+                   inspect.signature(self.pairing).parameters.items()
+                   if k not in ["self","dataset"]
+                  ]
+        fp_dict = {k: kwargs[k] for k in dict(kwargs) if k in fp_args}
+        
+        p_m1 = xp.where((dataset['mass_1']>=self.mmin)*(dataset['mass_1']<=self.mmax),
+                        self.p1_m1(dataset['mass_1'], **pm1_dict),
+                        0.0
+                        )
+        p_m2 = xp.where((dataset['mass_2']>=self.mmin)*(dataset['mass_2']<=self.mmax),
+                        self.p2_m2(dataset['mass_2'], **pm2_dict),
+                        0.0
+                        )
+        fp = self.pairing(dataset, **fp_dict)
+
+        return _primary_secondary_general(dataset, p_m1, p_m2) * fp
+
+class _IdenticalPairingMassDistribution(_PairingMassDistribution):
+    """
+    Base class for mass distribution with a pairing function, where p(m1) and p(m2)
+    are identical.
+    
+    Implements mass distributions of the form:
+    
+    .. math::
         p(m_1, m_2) = p_m(m_1) * p_m(m_2) * f_p(q) : m_1 \geq m_2
     
     """
@@ -702,7 +762,7 @@ class _PairingMassDistribution(object):
 
     def pairing(self, *args, **kwargs):
         raise NotImplementedError
-
+    
     def p_m1_m2(self, dataset, **kwargs):
         # parse arguments for use in pm(m) vs fp(q)
         pm_args = [k for k, v in 
@@ -717,6 +777,7 @@ class _PairingMassDistribution(object):
                   ]
         fp_dict = {k: kwargs[k] for k in dict(kwargs) if k in fp_args}
         
+        # evaluate probabilities
         p_m1 = xp.where((dataset['mass_1']>=self.mmin)*(dataset['mass_1']<=self.mmax),
                         self.p_m(dataset['mass_1'], **pm_dict),
                         0.0
@@ -729,7 +790,7 @@ class _PairingMassDistribution(object):
 
         return _primary_secondary_general(dataset, p_m1, p_m2) * fp
 
-class _NotchFilterPairingMassDistribution(_PairingMassDistribution):
+class _NotchFilterPairingMassDistribution(_IdenticalPairingMassDistribution):
     """
     Generic pairing function mass distribution with "matter matters" 1D mass
     model base class.
@@ -851,6 +912,51 @@ class NotchFilterPowerLawGaussianPairingMassDistribution(_NotchFilterPairingMass
         kwargs.pop('self')
         return self.p_m1_m2(**kwargs)
 
+class SinglePeakPairingMassDistribution(_PairingMassDistribution):
+    def __init__(self,mmin=2.0, mmax=100.):
+        _PairingMassDistribution.__init__(self,mmin=mmin,mmax=mmax)
+        self.m1s = xp.linspace(2, 100, 1000)
+
+    def pairing(self, dataset, beta_q):
+        mass_ratio = dataset["mass_2"]/dataset["mass_1"]
+        return powerlaw(mass_ratio, beta_q, 1, self.qmin)
+    
+    def p_m(self, mass, alpha, mmin, mmax, lam, mpp, sigpp):
+        p_m = two_component_single(
+            mass,
+            alpha=alpha,
+            mmin=mmin,
+            mmax=mmax,
+            lam=lam,
+            mpp=mpp,
+            sigpp=sigpp,
+        )
+        norm = self.norm_p_m1(
+            alpha=alpha,
+            mmin=mmin,
+            mmax=mmax,
+            lam=lam,
+            mpp=mpp,
+            sigpp=sigpp,
+        )
+        return p_m / norm
+
+    def norm_p_m1(self, alpha, mmin, mmax, lam, mpp, sigpp):
+        """Calculate the normalisation factor for the primary mass"""
+        p_m = two_component_single(
+            self.m1s, alpha=alpha, mmin=mmin, mmax=mmax, lam=lam, mpp=mpp, sigpp=sigpp
+        )
+
+        norm = trapz(p_m, self.m1s)
+        return norm
+
+    def __call__(self, dataset, alpha, mmin, mmax, lam, mpp, sigpp,
+    beta_q):
+        # get arguments in a dict
+        kwargs = locals()
+        kwargs.pop('self')
+        return self.p_m1_m2(**kwargs)
+
 class _SmoothedMassDistribution(object):
     """
     Generic smoothed mass distribution base class.
@@ -949,6 +1055,56 @@ class _SmoothedMassDistribution(object):
         window[(masses < mmin) | (masses > mmax)] = 0
         return window
 
+class SinglePeakSmoothedPairingMassDistribution(_SmoothedMassDistribution,
+                                                _IdenticalPairingMassDistribution):
+    def __init__(self,mmin=2.0, mmax=100.):
+        _PairingMassDistribution.__init__(self,mmin=mmin,mmax=mmax)
+        _SmoothedMassDistribution.__init__(self)
+
+    def pairing(self, dataset, beta_q):
+        mass_ratio = dataset["mass_2"]/dataset["mass_1"]
+        return powerlaw(mass_ratio, beta_q, 1, self.qmin)
+    
+    def p_m(self, mass, alpha, mmin, mmax, lam, mpp, sigpp, delta_m):
+        p_m = two_component_single(
+            mass,
+            alpha=alpha,
+            mmin=mmin,
+            mmax=mmax,
+            lam=lam,
+            mpp=mpp,
+            sigpp=sigpp,
+        )
+        p_m *= self.smoothing(mass, mmin=mmin, mmax=mmax, delta_m=delta_m)
+        norm = self.norm_p_m1(
+            alpha=alpha,
+            mmin=mmin,
+            mmax=mmax,
+            lam=lam,
+            mpp=mpp,
+            sigpp=sigpp,
+            delta_m=delta_m,
+        )
+        return p_m / norm
+
+    def norm_p_m1(self, alpha, mmin, mmax, lam, mpp, sigpp, delta_m):
+        """Calculate the normalisation factor for the primary mass"""
+        if delta_m == 0.0:
+            return 1
+        p_m = two_component_single(
+            self.m1s, alpha=alpha, mmin=mmin, mmax=mmax, lam=lam, mpp=mpp, sigpp=sigpp
+        )
+        p_m *= self.smoothing(self.m1s, mmin=mmin, mmax=mmax, delta_m=delta_m)
+
+        norm = trapz(p_m, self.m1s)
+        return norm
+
+    def __call__(self, dataset, alpha, mmin, mmax, lam, mpp, sigpp,
+    delta_m, beta_q):
+        # get arguments in a dict
+        kwargs = locals()
+        kwargs.pop('self')
+        return self.p_m1_m2(**kwargs)
 
 class SinglePeakSmoothedMassDistribution(_SmoothedMassDistribution):
     def __call__(self, dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m):
