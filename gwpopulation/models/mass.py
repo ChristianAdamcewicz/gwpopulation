@@ -4,8 +4,8 @@ Implemented mass models
 
 from warnings import warn
 
-from ..cupy_utils import trapz, xp
-from ..utils import powerlaw, truncnorm
+from ..cupy_utils import trapz, cumtrapz, xp
+from ..utils import powerlaw, truncnorm, truncskewnorm, beta_dist, frank_copula
 
 
 def double_power_law_primary_mass(mass, alpha_1, alpha_2, mmin, mmax, break_fraction):
@@ -444,6 +444,7 @@ class _SmoothedMassDistribution(object):
         self.dm = self.m1s[1] - self.m1s[0]
         self.dq = self.qs[1] - self.qs[0]
         self.m1s_grid, self.qs_grid = xp.meshgrid(self.m1s, self.qs)
+        self.chi_effs = xp.linspace(-1, 1, 500)
 
     def __call__(self, *args, **kwargs):
         raise NotImplementedError
@@ -610,220 +611,6 @@ class SinglePeakSmoothedMassDistribution(_SmoothedMassDistribution):
 
         norm = trapz(p_m, self.m1s)
         return norm
-
-class BaseSmoothedMassDistribution(object):
-    """
-    Generic smoothed mass distribution base class.
-
-    Implements the low-mass smoothing and power-law mass ratio
-    distribution. Requires p_m1 to be implemented.
-
-    Parameters
-    ==========
-    mmin: float
-        The minimum mass considered for numerical normalization
-    mmax: float
-        The maximum mass considered for numerical normalization
-    """
-
-    primary_model = None
-
-    def __init__(self, mmin=2, mmax=100):
-        self.mmin = mmin
-        self.mmax = mmax
-        self.m1s = xp.linspace(mmin, mmax, 1000)
-        self.qs = xp.linspace(0.001, 1, 500)
-        self.dm = self.m1s[1] - self.m1s[0]
-        self.dq = self.qs[1] - self.qs[0]
-        self.m1s_grid, self.qs_grid = xp.meshgrid(self.m1s, self.qs)
-
-    def __call__(self, dataset, *args, **kwargs):
-        beta = kwargs.pop("beta")
-        lam_q = kwargs.pop("lam_q")
-        sigma_q = kwargs.pop("sigma_q")
-        mmin = kwargs.get("mmin", self.mmin)
-        mmax = kwargs.get("mmax", self.mmax)
-        if mmin < self.mmin:
-            raise ValueError(
-                "{self.__class__}: mmin ({mmin}) < self.mmin ({self.mmin})"
-            )
-        if mmax > self.mmax:
-            raise ValueError(
-                "{self.__class__}: mmax ({mmax}) > self.mmax ({self.mmax})"
-            )
-        delta_m = kwargs.get("delta_m", 0)
-        p_m1 = self.p_m1(dataset, **kwargs)
-        p_q = self.p_q(dataset, beta=beta, mmin=mmin, delta_m=delta_m, lam_q=lam_q, sigma_q=sigma_q)
-        prob = p_m1 * p_q
-        return prob
-
-    def p_m1(self, dataset, **kwargs):
-        mmin = kwargs.get("mmin", self.mmin)
-        delta_m = kwargs.pop("delta_m", 0)
-        p_m = self.__class__.primary_model(dataset["mass_1"], **kwargs)
-        p_m *= self.smoothing(
-            dataset["mass_1"], mmin=mmin, mmax=self.mmax, delta_m=delta_m
-        )
-        norm = self.norm_p_m1(delta_m=delta_m, **kwargs)
-        return p_m / norm
-
-    def norm_p_m1(self, delta_m, **kwargs):
-        """Calculate the normalisation factor for the primary mass"""
-        mmin = kwargs.get("mmin", self.mmin)
-        if delta_m == 0:
-            return 1
-        p_m = self.__class__.primary_model(self.m1s, **kwargs)
-        p_m *= self.smoothing(self.m1s, mmin=mmin, mmax=self.mmax, delta_m=delta_m)
-
-        norm = trapz(p_m, self.m1s)
-        return norm
-
-    def p_q(self, dataset, beta, mmin, delta_m, lam_q, sigma_q):
-        p_q_pow=powerlaw(dataset["mass_ratio"], beta, 1, mmin / dataset["mass_1"])
-        p_q_norm=truncnorm(dataset["mass_ratio"], mu=1, sigma=sigma_q, high=1, low=mmin / dataset["mass_1"])
-        p_q=(1-lam_q)*p_q_pow + lam_q * p_q_norm
-        p_q *= self.smoothing(
-            dataset["mass_1"] * dataset["mass_ratio"],
-            mmin=mmin,
-            mmax=dataset["mass_1"],
-            delta_m=delta_m,
-        )
-        
-        try:
-            p_q /= self.norm_p_q(beta=beta, mmin=mmin, delta_m=delta_m, lam_q=lam_q, sigma_q=sigma_q)
-        except (AttributeError, TypeError, ValueError):
-            self._cache_q_norms(dataset["mass_1"])
-            p_q /= self.norm_p_q(beta=beta, mmin=mmin, delta_m=delta_m, lam_q=lam_q, sigma_q=sigma_q)
-
-        return xp.nan_to_num(p_q)
-
-    def norm_p_q(self, beta, mmin, delta_m, lam_q, sigma_q):
-        """Calculate the mass ratio normalisation by linear interpolation"""
-        if delta_m == 0.0:
-            return 1
-        p_q_pow=powerlaw(self.qs_grid, beta, 1, mmin / self.m1s_grid)
-        p_q_norm=truncnorm(self.qs_grid, mu=1, sigma=sigma_q, high=1, low=mmin / self.m1s_grid)
-        p_q=(1-lam_q)*p_q_pow + lam_q * p_q_norm
-        p_q *= self.smoothing(
-            self.m1s_grid * self.qs_grid, mmin=mmin, mmax=self.m1s_grid, delta_m=delta_m
-        )
-        
-        norms = trapz(p_q, self.qs, axis=0)
-
-        all_norms = (
-            norms[self.n_below] * (1 - self.step) + norms[self.n_above] * self.step
-        )
-
-        return all_norms
-
-    def _cache_q_norms(self, masses):
-        """
-        Cache the information necessary for linear interpolation of the mass
-        ratio normalisation
-        """
-        self.n_below = xp.zeros_like(masses, dtype=int) - 1
-        m_below = xp.zeros_like(masses)
-        for mm in self.m1s:
-            self.n_below += masses > mm
-            m_below[masses > mm] = mm
-        self.n_above = self.n_below + 1
-        max_idx = len(self.m1s)
-        self.n_below[self.n_below < 0] = 0
-        self.n_above[self.n_above == max_idx] = max_idx - 1
-        self.step = xp.minimum((masses - m_below) / self.dm, 1)
-
-    @staticmethod
-    def smoothing(masses, mmin, mmax, delta_m):
-        """
-        Apply a one sided window between mmin and mmin + delta_m to the
-        mass pdf.
-
-        The upper cut off is a step function,
-        the lower cutoff is a logistic rise over delta_m solar masses.
-
-        See T&T18 Eqs 7-8
-        Note that there is a sign error in that paper.
-
-        S = (f(m - mmin, delta_m) + 1)^{-1}
-        f(m') = delta_m / m' + delta_m / (m' - delta_m)
-
-        See also, https://en.wikipedia.org/wiki/Window_function#Planck-taper_window
-        """
-        window = xp.ones_like(masses)
-        if delta_m > 0.0:
-            smoothing_region = (masses >= mmin) & (masses < (mmin + delta_m))
-            shifted_mass = masses[smoothing_region] - mmin
-            if shifted_mass.size:
-                exponent = xp.nan_to_num(
-                    delta_m / shifted_mass + delta_m / (shifted_mass - delta_m)
-                )
-                window[smoothing_region] = 1 / (xp.exp(exponent) + 1)
-        window[(masses < mmin) | (masses > mmax)] = 0
-        return window
-
-
-class SinglePeakGaussianSmoothedMassDistribution(BaseSmoothedMassDistribution):
-
-    primary_model = two_component_single
-
-    def __call__(self, dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m, lam_q, sigma_q):
-        """
-        Powerlaw + peak model for two-dimensional mass distribution with low
-        mass smoothing.
-
-        https://arxiv.org/abs/1801.02699 Eq. (11) (T&T18)
-
-        Parameters
-        ----------
-        dataset: dict
-            Dictionary of numpy arrays for 'mass_1' and 'mass_ratio'.
-        alpha: float
-            Powerlaw exponent for more massive black hole.
-        beta: float
-            Power law exponent of the mass ratio distribution.
-        mmin: float
-            Minimum black hole mass.
-        mmax: float
-            Maximum mass in the powerlaw distributed component.
-        lam: float
-            Fraction of black holes in the Gaussian component.
-        mpp: float
-            Mean of the Gaussian component.
-        sigpp: float
-            Standard deviation of the Gaussian component.
-        delta_m: float
-            Rise length of the low end of the mass distribution.
-
-        Notes
-        -----
-        The Gaussian component is bounded between [`mmin`, `self.mmax`].
-        This means that the `mmax` parameter is _not_ the global maximum.
-        """
-        return super(SinglePeakGaussianSmoothedMassDistribution, self).__call__(
-            dataset=dataset,
-            alpha=alpha,
-            mmin=mmin,
-            mmax=mmax,
-            lam=lam,
-            mpp=mpp,
-            sigpp=sigpp,
-            delta_m=delta_m,
-            beta=beta,
-            lam_q=lam_q,
-            sigma_q=sigma_q,
-            gaussian_mass_maximum=self.mmax,
-        )    
-    
- 
-
-class SmoothedMassDistribution(SinglePeakSmoothedMassDistribution):
-    def __init__(self):
-        warn(
-            "SmoothedMassDistribution has been deprecated and will be removed in a "
-            "future release, use SinglePeakSmoothedMassDistribution instead.",
-            DeprecationWarning,
-        )
-        super(SmoothedMassDistribution, self).__init__()
 
 
 class MultiPeakSmoothedMassDistribution(_SmoothedMassDistribution):
@@ -1162,3 +949,167 @@ class BrokenPowerLawPeakSmoothedMassDistribution(_SmoothedMassDistribution):
         p_m *= self.smoothing(self.m1s, mmin=mmin, mmax=100, delta_m=delta_m)
         norm = trapz(p_m, self.m1s)
         return norm
+
+
+class SPSMD_EffectiveCopula(SinglePeakSmoothedMassDistribution):
+    def __call__(self, dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m,
+                 mu_chi_eff, log_sigma_chi_eff, chi_eff_min, chi_eff_skew, kappa_q_chi_eff, 
+                 mu_chi_dif, log_sigma_chi_dif, chi_dif_min, chi_dif_max, chi_dif_skew,
+                 alpha_rho, beta_rho,
+                 xi_spin, amax,
+                 alpha_chi, beta_chi,
+                 lambda_chi_peak=0):
+        """
+        Adds skewed Gaussians for chi_dif, rho_1, and rho_2 to copula model.
+        
+        Adds copula and Gaussian chi_eff distribution to PL+P model.
+        
+        Parameters
+        ----------
+        dataset: dict
+            Dictionary of numpy arrays for 'mass_1', 'mass_ratio', and 'chi_eff'.
+        alpha: float
+            Powerlaw exponent for more massive black hole.
+        beta: float
+            Power law exponent of the mass ratio distribution.
+        mmin: float
+            Minimum black hole mass.
+        mmax: float
+            Maximum mass in the powerlaw distributed component.
+        lam: float
+            Fraction of black holes in the Gaussian component.
+        mpp: float
+            Mean of the Gaussian component.
+        sigpp: float
+            Standard deviation fo the Gaussian component.
+        delta_m: float
+            Rise length of the low end of the mass distribution.
+        mu_chi_eff: float
+            Mean of chi_eff Gaussian.
+        log_sigma_chi_eff: float
+            Log_10 of standard deviation for chi_eff Gaussian.
+        chi_eff_min: float
+            Minimum allowed chi_eff.
+        chi_eff_skew: float
+            Skewness of chi_eff Gaussian.
+        kappa_q_chi_eff: float
+            Correlation between chi_eff and mass ratio.
+        mu_chi_dif: float
+            Mean of chi_dif Gaussian.
+        log_sigma_dif_eff: float
+            Log_10 of standard deviation for chi_dif Gaussian.
+        chi_dif_min: float
+            Minimum allowed chi_dif.
+        chi_dif_max: float
+            Maximum allowed chi_dif.
+        chi_dif_skew: float
+            Skewness of chi_dif Gaussian.
+        alpha_rho, beta_rho: float
+            Parameters of rho distribution for both black holes.
+        amax: float
+            Maximum allowed spin magnitude
+        lambda_chi_peak: float
+            Fraction of BBHs with no spin.
+        """ 
+        p_mass = super(SPSMD_EffectiveCopula, self).__call__(
+            dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m)
+        
+        p_field = self.p_field(dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m,
+                mu_chi_eff, 10**log_sigma_chi_eff, chi_eff_min, chi_eff_skew, kappa_q_chi_eff, 
+                mu_chi_dif, 10**log_sigma_chi_dif, chi_dif_min, chi_dif_max, chi_dif_skew,
+                alpha_rho, beta_rho, amax)
+        if xi_spin == 1:
+            return p_mass*p_field
+        
+        p_dynamical = self.p_dynamical(dataset, alpha_chi, beta_chi, amax)
+        
+        prob = p_mass*(xi_spin*p_field + (1.-xi_spin)*p_dynamical)
+        return prob
+    
+    def p_field(self, dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m,
+                mu_chi_eff, sigma_chi_eff, chi_eff_min, chi_eff_skew, kappa_q_chi_eff, 
+                mu_chi_dif, sigma_chi_dif, chi_dif_min, chi_dif_max, chi_dif_skew,
+                alpha_rho, beta_rho, amax):
+        p_field = self.p_chi_eff(dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m,
+                                 mu_chi_eff, sigma_chi_eff, chi_eff_min, chi_eff_skew, kappa_q_chi_eff)
+        p_field *= self.p_chi_dif(dataset, mu_chi_dif, sigma_chi_dif, chi_dif_max, chi_dif_min, chi_dif_skew)
+        p_field *= self.p_rho(dataset, alpha_rho, beta_rho, amax=amax)
+        return p_field/dataset["prior_jacobian"]
+        
+    def p_dynamical(self, dataset, alpha_chi, beta_chi, amax):
+        p_dynamical = beta_dist(dataset["a_1"], alpha=alpha_chi, beta=beta_chi, scale=amax)
+        p_dynamical *= beta_dist(dataset["a_2"], alpha=alpha_chi, beta=beta_chi, scale=amax)
+        p_dynamical /= 4
+        return p_dynamical
+    
+    def p_chi_eff(self, dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m,
+                  mu_chi_eff, sigma_chi_eff, chi_eff_min, chi_eff_skew, kappa_q_chi_eff):
+        u, v, chi_eff_norm = self.copula_coords(dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m,
+                                                mu_chi_eff, sigma_chi_eff, chi_eff_min, chi_eff_skew)
+        p_chi_eff = truncskewnorm(dataset["chi_eff"], mu=mu_chi_eff, sigma=sigma_chi_eff,
+                                  high=1, low=chi_eff_min, skew=chi_eff_skew)
+        p_chi_eff /= chi_eff_norm
+        p_chi_eff *= frank_copula(u, v, kappa_q_chi_eff)
+        return p_chi_eff
+        
+    def p_chi_dif(self, dataset, mu_chi_dif, sigma_chi_dif, chi_dif_max, chi_dif_min, chi_dif_skew):
+        p_chi_dif_grid = truncskewnorm(self.chi_effs, mu=mu_chi_dif, sigma=sigma_chi_dif,
+                                       high=chi_dif_max, low=chi_dif_min, skew=chi_dif_skew)
+        norm_chi_dif = trapz(p_chi_dif_grid, self.chi_effs)
+        p_chi_dif = truncskewnorm(dataset["chi_dif"], mu=mu_chi_dif, sigma=sigma_chi_dif,
+                                  high=chi_dif_max, low=chi_dif_min, skew=chi_dif_skew)
+        p_chi_dif /= norm_chi_dif
+        return xp.nan_to_num(p_chi_dif)
+    
+    def p_rho(self, dataset, alpha_rho, beta_rho, amax):
+        p_rho = beta_dist(dataset["rho_1"], alpha=alpha_rho, beta=beta_rho, scale=amax)
+        p_rho *= beta_dist(dataset["rho_2"], alpha=alpha_rho, beta=beta_rho, scale=amax)
+        return p_rho
+    
+    def copula_coords(self, dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m,
+                      mu_chi_eff, sigma_chi_eff, chi_eff_min, chi_eff_skew):
+        '''Get u(q)'''
+        # p(m1) grid
+        p_m = two_component_single(
+            self.m1s, alpha=alpha, mmin=mmin, mmax=mmax, lam=lam, mpp=mpp, sigpp=sigpp)
+        p_m *= self.smoothing(self.m1s, mmin=mmin, mmax=100, delta_m=delta_m)
+        p_m_norm = trapz(p_m, self.m1s)
+        p_m /= p_m_norm
+        p_m = xp.nan_to_num(p_m)
+
+        # p(q|m1) grid
+        p_q = powerlaw(self.qs_grid, beta, 1, mmin / self.m1s_grid)
+        p_q *= self.smoothing(
+            self.m1s_grid * self.qs_grid, mmin=mmin, mmax=self.m1s_grid, delta_m=delta_m)
+        p_q_norm = trapz(p_q, self.qs, axis=0)
+        p_q /= p_q_norm
+        p_q = xp.nan_to_num(p_q)
+
+        # p(q) grid
+        integrand_q_m = p_q * p_m
+        p_q_marg = trapz(integrand_q_m, self.m1s, axis=-1)
+        p_q_marg = xp.nan_to_num(p_q_marg)
+
+        # u(q) grid
+        u = cumtrapz(p_q_marg, self.qs, initial=0)
+        u /= xp.max(u)
+        u = xp.nan_to_num(u)
+
+        # Interpolate for u(q)
+        res_u = xp.interp(dataset["mass_ratio"], self.qs, u)
+        
+        '''get v(chi_eff)'''
+        # p(chi_eff) grid
+        p_chi_eff = truncskewnorm(self.chi_effs, mu=mu_chi_eff, sigma=sigma_chi_eff,
+                                  high=1, low=chi_eff_min, skew=chi_eff_skew)
+        
+        # v(chi_eff) grid
+        v = cumtrapz(p_chi_eff, self.chi_effs, initial=0)
+        chi_eff_norm = xp.max(v)
+        v /= chi_eff_norm
+        v = xp.nan_to_num(v)
+        
+        # Interpolate for v(chi_eff)
+        res_v = xp.interp(dataset["chi_eff"], self.chi_effs, v)
+        
+        return res_u, res_v, chi_eff_norm

@@ -6,6 +6,13 @@ from ..cupy_utils import xp
 from ..utils import beta_dist, truncnorm, unnormalized_2d_gaussian
 
 
+def non_spin(dataset):
+    """
+    Blank spin model.
+    """
+    return 1.
+
+
 def iid_spin(dataset, xi_spin, sigma_spin, amax, alpha_chi, beta_chi, lambda_chi_peak, sigma_chi_peak):
     r"""
     Independently and identically distributed spins.
@@ -31,48 +38,8 @@ def iid_spin(dataset, xi_spin, sigma_spin, amax, alpha_chi, beta_chi, lambda_chi
     ) * iid_spin_magnitude_beta(dataset, amax, alpha_chi, beta_chi, lambda_chi_peak, sigma_chi_peak)
     return prior
 
-def narrow_Gaussian_iid_spin_magnitude_beta(dataset, amax=1, alpha_chi=1, beta_chi=1, lambda_chi_peak=0):#, sigma_chi_peak=0.04):
-    """Independent and identically distributed beta+Gaussain distributions for both spin magnitudes.
 
-    https://arxiv.org/abs/1805.06442 Eq. (10)
-    https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.beta.html
-
-    Parameters
-    ----------
-    dataset: dict
-        Dictionary of numpy arrays containing 'a_1' and 'a_2'.
-    alpha_chi, beta_chi: float
-        Parameters of Beta distribution for both black holes.
-    amax: float
-        Maximum black hole spin.
-    """
-    
-    return narrow_Gaussian_ind_spin_magnitude_beta(
-        dataset, alpha_chi, alpha_chi, beta_chi, beta_chi, amax, amax, lambda_chi_peak)#, sigma_chi_peak, sigma_chi_peak)
-
-
-def narrow_Gaussian_ind_spin_magnitude_beta(dataset, alpha_chi_1, alpha_chi_2, beta_chi_1, beta_chi_2, amax_1, amax_2, lambda_chi_peak=0): #, sigma_chi_peak=0.04):
-    """Independent and identically distributed beta+Gaussain distributions for both spin magnitudes.
-
-    https://arxiv.org/abs/1805.06442 Eq. (10)
-    https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.beta.html
-
-    Parameters
-    ----------
-    dataset: dict
-        Dictionary of numpy arrays containing 'a_1' and 'a_2'.
-    alpha_chi, beta_chi: float
-        Parameters of Beta distribution for both black holes.
-    amax: float
-        Maximum black hole spin.
-    """
-    
-    return (1-lambda_chi_peak)*independent_spin_magnitude_beta(
-        dataset, alpha_chi_1, alpha_chi_2, beta_chi_1, beta_chi_2, amax_1, amax_2, lambda_chi_peak) + lambda_chi_peak * truncnorm(dataset["a_1"], mu=0, sigma=0.2, high=1, low=0)*truncnorm(dataset["a_2"], mu=0, sigma=0.2, high=1, low=0)#, sigma_chi_peak, sigma_chi_peak)
-
-
-
-def iid_spin_magnitude_beta(dataset, amax=1, alpha_chi=1, beta_chi=1, lambda_chi_peak=0):#, sigma_chi_peak=0.04):
+def iid_spin_magnitude_beta(dataset, amax=1, alpha_chi=1, beta_chi=1, lambda_chi_peak=0):
     """Independent and identically distributed beta distributions for both spin magnitudes.
 
     https://arxiv.org/abs/1805.06442 Eq. (10)
@@ -88,11 +55,11 @@ def iid_spin_magnitude_beta(dataset, amax=1, alpha_chi=1, beta_chi=1, lambda_chi
         Maximum black hole spin.
     """
     return independent_spin_magnitude_beta(
-        dataset, alpha_chi, alpha_chi, beta_chi, beta_chi, amax, amax, lambda_chi_peak)#, sigma_chi_peak, sigma_chi_peak)
+        dataset, alpha_chi, alpha_chi, beta_chi, beta_chi, amax, amax, lambda_chi_peak)
 
 
 def independent_spin_magnitude_beta(
-    dataset, alpha_chi_1, alpha_chi_2, beta_chi_1, beta_chi_2, amax_1, amax_2, lambda_chi_peak=0):#, sigma_chi_peak_1, sigma_chi_peak_2):
+    dataset, alpha_chi_1, alpha_chi_2, beta_chi_1, beta_chi_2, amax_1, amax_2, lambda_chi_peak=0):
     """Independent beta distributions for both spin magnitudes.
 
     https://arxiv.org/abs/1805.06442 Eq. (10)
@@ -111,41 +78,21 @@ def independent_spin_magnitude_beta(
     """
     if alpha_chi_1 < 0 or beta_chi_1 < 0 or alpha_chi_2 < 0 or beta_chi_2 < 0:
         return 0
-
-    '''
-    prior = (
-        (1 - lambda_chi_peak_1) * beta_dist(
-            dataset["a_1"], alpha_chi_1, beta_chi_1, scale=amax_1
-        ) + lambda_chi_peak_1 * truncnorm(
-            dataset["a_1"], mu=0, sigma=sigma_chi_peak_1, low=0, high=amax_1
-        )
-    ) *  (
-        (1 - lambda_chi_peak_2) * beta_dist(
-        dataset["a_2"], alpha_chi_2, beta_chi_2, scale=amax_2
-        ) + lambda_chi_peak_2 * truncnorm(
-            dataset["a_2"], mu=0, sigma=sigma_chi_peak_2, low=0, high=amax_2)
-    )
-    '''
-
     prior = beta_dist(dataset["a_1"], alpha_chi_1, beta_chi_1, scale=amax_1
     ) * beta_dist(dataset["a_2"], alpha_chi_2, beta_chi_2, scale=amax_2)
     return prior
 
 
-def iid_spin_orientation_gaussian_isotropic(dataset, xi_spin, sigma_spin, zmin):
+def iid_spin_orientation_gaussian_isotropic(dataset, xi_spin, sigma_spin):
     r"""A mixture model of spin orientations with isotropic and normally
     distributed components. The distribution of primary and secondary spin
     orientations are expected to be identical and independent.
-
     https://arxiv.org/abs/1704.08370 Eq. (4)
-
     .. math::
         p(z_1, z_2 | \xi, \sigma) =
         \frac{(1 - \xi)^2}{4}
         + \xi \prod_{i\in\{1, 2\}} \mathcal{N}(z_i; \mu=1, \sigma=\sigma, z_\min=-1, z_\max=1)
-
     Where :math:`\mathcal{N}` is the truncated normal distribution.
-
     Parameters
     ----------
     dataset: dict
@@ -156,114 +103,36 @@ def iid_spin_orientation_gaussian_isotropic(dataset, xi_spin, sigma_spin, zmin):
         Width of preferentially aligned component.
     """
     return independent_spin_orientation_gaussian_isotropic(
-        dataset, xi_spin, sigma_spin, sigma_spin, zmin, zmin
+        dataset, xi_spin, sigma_spin, sigma_spin
     )
 
-def iiz_spin_orientation_gaussian_isotropic(dataset, xi_spin, sigma_spin, zmin):
-    r"""A mixture model of spin orientations with isotropic and normally
-    distributed components. The distribution of primary and secondary spin
-    orientations are expected to be identical and independent.
 
-    https://arxiv.org/abs/1704.08370 Eq. (4)
-
-    .. math::
-        p(z_1, z_2 | \xi, \sigma) =
-        \frac{(1 - \xi)^2}{4}
-        + \xi \prod_{i\in\{1, 2\}} \mathcal{N}(z_i; \mu=1, \sigma=\sigma, z_\min=-1, z_\max=1)
-
-    Where :math:`\mathcal{N}` is the truncated normal distribution.
-
-    Parameters
-    ----------
-    dataset: dict
-        Dictionary of numpy arrays for 'cos_tilt_1' and 'cos_tilt_2'.
-    xi_spin: float
-        Fraction of black holes in preferentially aligned component (:math:`\xi`).
-    sigma_spin: float
-        Width of preferentially aligned component.
-    """
-    zmin_1 = zmin
-    zmin_2 = zmin
-    sigma_spin_1 = sigma_spin
-    sigma_spin_2 = sigma_spin
-    
-    prior = (1 - xi_spin) / 4 + xi_spin * truncnorm(
-        dataset["cos_tilt_1"], 1, sigma_spin_1, 1, zmin_1
-    ) * truncnorm(dataset["cos_tilt_2"], 1, sigma_spin_2, 1, zmin_2)
-    # bool_arr  = (dataset["cos_tilt_1"] >= zmin_1)*(dataset["cos_tilt_2"] >= zmin_2)
-    # prior[bool_arr == False] = 0
-    
-    return prior
-
-
-def inz_spin_orientation_gaussian_isotropic(dataset, xi_spin, sigma_spin_1, sigma_spin_2, zmin_1, zmin_2):
-    r"""A mixture model of spin orientations with isotropic and normally
-    distributed components. The distribution of primary and secondary spin
-    orientations are expected to be identical and independent.
-
-    https://arxiv.org/abs/1704.08370 Eq. (4)
-
-    .. math::
-        p(z_1, z_2 | \xi, \sigma) =
-        \frac{(1 - \xi)^2}{4}
-        + \xi \prod_{i\in\{1, 2\}} \mathcal{N}(z_i; \mu=1, \sigma=\sigma, z_\min=-1, z_\max=1)
-
-    Where :math:`\mathcal{N}` is the truncated normal distribution.
-
-    Parameters
-    ----------
-    dataset: dict
-        Dictionary of numpy arrays for 'cos_tilt_1' and 'cos_tilt_2'.
-    xi_spin: float
-        Fraction of black holes in preferentially aligned component (:math:`\xi`).
-    sigma_spin: float
-        Width of preferentially aligned component.
-    """
-    # zmin_1 = zmin
-    # zmin_2 = zmin
-    # sigma_spin_1 = sigma_spin
-    # sigma_spin_2 = sigma_spin
-    
-    prior = (1 - xi_spin) / 4 + xi_spin * truncnorm(
-        dataset["cos_tilt_1"], 1, sigma_spin_1, 1, zmin_1
-    ) * truncnorm(dataset["cos_tilt_2"], 1, sigma_spin_2, 1, zmin_2)
-    # bool_arr  = (dataset["cos_tilt_1"] >= zmin_1)*(dataset["cos_tilt_2"] >= zmin_2)
-    # prior[bool_arr == False] = 0
-    
-    return prior
-
-def independent_spin_orientation_gaussian_isotropic(dataset, xi_spin, sigma_spin_1, sigma_spin_2, zmin_1, zmin_2):
+def independent_spin_orientation_gaussian_isotropic(dataset, xi_spin, sigma_1, sigma_2):
     r"""A mixture model of spin orientations with isotropic and normally
     distributed components.
-
     https://arxiv.org/abs/1704.08370 Eq. (4)
-
     .. math::
         p(z_1, z_2 | \xi, \sigma_1, \sigma_2) =
         \frac{(1 - \xi)^2}{4}
         + \xi \prod_{i\in\{1, 2\}} \mathcal{N}(z_i; \mu=1, \sigma=\sigma_i, z_\min=-1, z_\max=1)
-
     Where :math:`\mathcal{N}` is the truncated normal distribution.
-
     Parameters
     ----------
     dataset: dict
         Dictionary of numpy arrays for 'cos_tilt_1' and 'cos_tilt_2'.
     xi_spin: float
         Fraction of black holes in preferentially aligned component (:math:`\xi`).
-    sigma_spin_1: float
+    sigma_1: float
         Width of preferentially aligned component for the more
         massive black hole (:math:`\sigma_1`).
-    sigma_spin_2: float
+    sigma_2: float
         Width of preferentially aligned component for the less
         massive black hole (:math:`\sigma_2`).
     """
-    prior = (1 - xi_spin) / ((1 - zmin_1) * (1 - zmin_2)) + xi_spin * truncnorm(
-        dataset["cos_tilt_1"], 1, sigma_spin_1, 1, zmin_1
-    ) * truncnorm(dataset["cos_tilt_2"], 1, sigma_spin_2, 1, zmin_2)
-    bool_arr  = (dataset["cos_tilt_1"] >= zmin_1)*(dataset["cos_tilt_2"] >= zmin_2)
-    prior[bool_arr == False] = 0
-    return prior
+    prior = (1 - xi_spin) / 4 + xi_spin * truncnorm(
+        dataset["cos_tilt_1"], 1, sigma_1, 1, -1
+    ) * truncnorm(dataset["cos_tilt_2"], 1, sigma_2, 1, -1)
+    return 
 
 
 def gaussian_chi_eff(dataset, mu_chi_eff, sigma_chi_eff):

@@ -119,6 +119,65 @@ def truncnorm(xx, mu, sigma, high, low):
     return prob
 
 
+def truncskewnorm(xx, mu, sigma, high, low, skew):
+    '''
+    Unnormalised truncated skewed normal distribution.
+    
+    Parameters
+    ----------
+    xx: float, array-like
+        The abscissa values (:math:`x`)
+    mu: float, array-like
+        The mean of the normal distribution (:math:`\mu`)
+    sigma: float
+        The standard deviation of the distribution (:math:`\sigma`)
+    high: float, array-like
+        The maximum of the distribution (:math:`x_\min`)
+    low: float, array-like
+        The minimum of the distribution (:math:`x_\max`)
+    skew: float, array-like
+        Skewness of the distribution
+
+    Returns
+    -------
+    prob: float, array-like
+        The distribution evaluated at `xx`
+    '''
+    if sigma <= 0:
+        raise ValueError(f"Sigma must be greater than 0, sigma={sigma}")
+    prob = xp.exp(-xp.power(xx - mu, 2) / (2 * sigma ** 2))
+    prob *= (1 + erf(skew * (xx - mu) / (xp.sqrt(2) * sigma)))
+    prob *= (xx <= high) & (xx >= low)
+    return xp.nan_to_num(prob)
+
+
+def frank_copula(u, v, kappa):
+    """
+    Frank copula density function.
+    
+    Parameters
+    ----------
+    u: float, array-like
+        CDF of first parameter.
+    v: float, array-like
+        CDF of second parameter.
+    kappa: float
+        Level of correlation
+
+    Returns
+    -------
+    prob: float, array-like
+        The distribution evaluated at (u,v)
+    """
+    if kappa == 0:
+        prob = 1.
+    else:
+        expkap = xp.exp(kappa)
+        expkapuv = expkap**(u + v)
+        prob = kappa * expkapuv * (expkap - 1) / (expkap - expkap**u - expkap**v + expkapuv)**2
+    return xp.nan_to_num(prob)
+
+
 def unnormalized_2d_gaussian(xx, yy, mu_x, mu_y, sigma_x, sigma_y, covariance):
     determinant = sigma_x ** 2 * sigma_y ** 2 * (1 - covariance)
     residual_x = (mu_x - xx) * sigma_x
@@ -129,6 +188,39 @@ def unnormalized_2d_gaussian(xx, yy, mu_x, mu_y, sigma_x, sigma_y, covariance):
         / determinant
     )
     return prob
+
+
+def effective_jacobian(q, a1, a2, z1, z2):
+    """
+    Computes the Jacobian:
+    |d(chi_eff, chi_dif, rho_1, rho_2)/d(a_1, a_2, z_1, z_2)|^-1
+    
+    Parameters
+    ----------
+    q: float, array-like
+        Mass ratio value (according to the convention q<1)
+    a1: float, array-like
+        Spin magnitude of heavier BH
+    a2: float, array-like
+        Spin magnitude of lighter BH
+    z1: float, array-like
+        Spin orientation (cos[t]) of heavier BH
+    z2: float, array-like
+        Spin orientation (cos[t]) of lighter BH
+
+    Returns
+    -------
+    result: float, array-like
+        Jacobian
+    """
+    import numpy as np
+    log_numerator = np.nan_to_num(
+        2*np.log(1.+q) + 0.5*(np.log(1.-z1**2) + np.log(1.-z2**2)))
+    log_denominator = np.nan_to_num(
+        np.log(1.+q**2) + np.log(a1) + np.log(a2))
+    log_result = log_numerator - log_denominator
+    result = np.exp(log_result)
+    return np.nan_to_num(result)
 
 
 def get_version_information():

@@ -61,6 +61,21 @@ def convert_to_beta_parameters(parameters, remove=True):
         done = done or _done
     if not done:
         _ = _convert("")
+        
+    converted['alpha_rho'], converted['beta_rho'], _, = mu_var_max_to_alpha_beta_max(
+                    parameters['mu_rho'], parameters['sigma_rho'], parameters['amax']
+                )
+    added_keys.append('alpha_rho')
+    added_keys.append('beta_rho')
+    if 'chi_eff_min' in parameters.keys():
+        converted['chi_eff_min_con'] = parameters['mu_chi_eff'] - parameters['chi_eff_min']
+        added_keys.append('chi_eff_min_con')
+    if 'chi_dif_min' in parameters.keys():
+        converted['chi_dif_min_con'] = parameters['mu_chi_dif'] - parameters['chi_dif_min']
+        added_keys.append('chi_dif_min_con')
+    if 'chi_dif_max' in parameters.keys():
+        converted['chi_dif_max_con'] = parameters['chi_dif_max'] - parameters['mu_chi_dif']
+        added_keys.append('chi_dif_max_con')
 
     return converted, added_keys
 

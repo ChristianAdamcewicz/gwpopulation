@@ -117,3 +117,49 @@ def trapz(y, x=None, dx=1.0, axis=-1):
     except ValueError:
         ret = xp.add.reduce(product, axis)
     return ret
+
+
+def tupleset(t, i, value):
+    l = list(t)
+    l[i] = value
+    return tuple(l)
+
+
+def cumtrapz(y, x=None, dx=1.0, axis=-1, initial=0):
+    y = xp.asarray(y)
+    if x is None:
+        d = dx
+    else:
+        x = xp.asarray(x)
+        if x.ndim == 1:
+            d = xp.diff(x)
+            # reshape to correct shape
+            shape = [1] * y.ndim
+            shape[axis] = -1
+            d = d.reshape(shape)
+        elif len(x.shape) != len(y.shape):
+            raise ValueError("If given, shape of x must be 1-d or the "
+                             "same as y.")
+        else:
+            d = xp.diff(x, axis=axis)
+
+        if d.shape[axis] != y.shape[axis] - 1:
+            raise ValueError("If given, length of x along axis must be the "
+                             "same as y.")
+        
+    
+    nd = len(y.shape)
+    slice1 = tupleset((slice(None),)*nd, axis, slice(1, None))
+    slice2 = tupleset((slice(None),)*nd, axis, slice(None, -1))
+    res = xp.cumsum(d * (y[slice1] + y[slice2]) / 2.0, axis=axis)
+
+    if initial is not None:
+        if not xp.isscalar(initial):
+            raise ValueError("`initial` parameter should be a scalar.")
+
+        shape = list(res.shape)
+        shape[axis] = 1
+        res = xp.concatenate([xp.ones(shape, dtype=res.dtype) * initial, res],
+                             axis=axis)
+    
+    return res
