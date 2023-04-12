@@ -6,7 +6,6 @@ Home-page: https://github.com/ColmTalbot/gwpopulation
 Author: Colm Talbot
 Author-email: colm.talbot@monash.edu
 License: MIT
-Platform: UNKNOWN
 Classifier: Programming Language :: Python :: 3.6
 Classifier: Programming Language :: Python :: 3.7
 Classifier: Programming Language :: Python :: 3.8
@@ -63,5 +62,3 @@ Most of the models implemented are derived from models presented in one of:
 
 As of v0.5.0 `GWPopulation` supports only `python >= 3.6`.
 See [the python 3 statement](https://python3statement.org/) for more information.
-
-
