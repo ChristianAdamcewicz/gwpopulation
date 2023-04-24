@@ -26,11 +26,11 @@ def convert_to_beta_parameters(parameters, remove=True):
     added_keys = list()
     converted = parameters.copy()
 
-    def _convert(suffix):
-        alpha = f"alpha_chi{suffix}"
-        beta = f"beta_chi{suffix}"
-        mu = f"mu_chi{suffix}"
-        sigma = f"sigma_chi{suffix}"
+    def _convert(suffix, param):
+        alpha = f"alpha_{param}{suffix}"
+        beta = f"beta_{param}{suffix}"
+        mu = f"mu_{param}{suffix}"
+        sigma = f"sigma_{param}{suffix}"
         amax = f"amax{suffix}"
 
         if alpha not in parameters.keys() or beta not in parameters.keys():
@@ -54,19 +54,14 @@ def convert_to_beta_parameters(parameters, remove=True):
                 done = False
         return done
 
-    done = False
-
-    for suffix in ["_1", "_2"]:
-        _done = _convert(suffix)
-        done = done or _done
-    if not done:
-        _ = _convert("")
-        
-    converted['alpha_rho'], converted['beta_rho'], _, = mu_var_max_to_alpha_beta_max(
-                    parameters['mu_rho'], parameters['sigma_rho'], parameters['amax']
-                )
-    added_keys.append('alpha_rho')
-    added_keys.append('beta_rho')
+    for param in ["chi", "rho"]:
+        done = False
+        for suffix in ["_1", "_2"]:
+            _done = _convert(suffix, param)
+            done = done or _done
+        if not done:
+            _ = _convert("", param)
+    
     if 'chi_eff_min' in parameters.keys():
         converted['chi_eff_min_con'] = parameters['mu_chi_eff'] - parameters['chi_eff_min']
         added_keys.append('chi_eff_min_con')
