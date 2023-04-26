@@ -15,6 +15,7 @@ gwpopulation.egg-info/dependency_links.txt
 gwpopulation.egg-info/requires.txt
 gwpopulation.egg-info/top_level.txt
 gwpopulation/models/__init__.py
+gwpopulation/models/joint.py
 gwpopulation/models/mass.py
 gwpopulation/models/redshift.py
 gwpopulation/models/spin.py

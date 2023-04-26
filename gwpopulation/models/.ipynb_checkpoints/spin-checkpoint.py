@@ -13,7 +13,7 @@ def non_spin(dataset):
     return 1.
 
 
-def iid_spin(dataset, xi_spin, sigma_spin, amax, alpha_chi, beta_chi, lambda_chi_peak, sigma_chi_peak):
+def iid_spin(dataset, xi_spin, sigma_spin, amax, alpha_chi, beta_chi):
     r"""
     Independently and identically distributed spins.
     The magnitudes are assumed to follow a Beta distribution and the
@@ -35,7 +35,7 @@ def iid_spin(dataset, xi_spin, sigma_spin, amax, alpha_chi, beta_chi, lambda_chi
     """
     prior = iid_spin_orientation_gaussian_isotropic(
         dataset, xi_spin, sigma_spin
-    ) * iid_spin_magnitude_beta(dataset, amax, alpha_chi, beta_chi, lambda_chi_peak, sigma_chi_peak)
+    ) * iid_spin_magnitude_beta(dataset, amax, alpha_chi, beta_chi)
     return prior
 
 
