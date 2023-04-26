@@ -2,4 +2,4 @@
 Implemented population models.
 """
 
-from . import mass, redshift, spin
+from . import mass, redshift, spin, joint
