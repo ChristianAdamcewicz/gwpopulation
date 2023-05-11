@@ -7,10 +7,9 @@ from .mass import SinglePeakSmoothedMassDistribution, two_component_single
 
 class SPSMDEffectiveCopulaBase(SinglePeakSmoothedMassDistribution):
     """
-    PL+P mass model with two spin sub-populations. One being a skewed gaussian chi_eff
+    PL+P mass model with correlated spin model. This being a skewed gaussian chi_eff
     and chi_dif, with identical beta distributions for rho_1 and rho_2 and a
-    copula correlating mass ratio and chi_eff. The second being identical beta 
-    distributions for chi_1 and chi_2 with a uniform distribution for cosine tilts.
+    copula correlating mass ratio and chi_eff.
     """
     def __init__(self, mmin=2, mmax=100):
         super(SPSMDEffectiveCopulaBase, self).__init__(mmin, mmax)
