@@ -1,26 +1,25 @@
 from warnings import warn
 
 from ..cupy_utils import trapz, cumtrapz, xp
-from ..utils import powerlaw, truncskewnorm, beta_dist
+from ..utils import powerlaw, truncskewnorm, beta_dist, frank_copula, gaussian_copula, fgm_copula
 from .mass import SinglePeakSmoothedMassDistribution, two_component_single
 
 
-class SPSMD_EffectiveCopula(SinglePeakSmoothedMassDistribution):
+class SPSMDEffectiveCopulaBase(SinglePeakSmoothedMassDistribution):
     """
     PL+P mass model with two spin sub-populations. One being a skewed gaussian chi_eff
-    and chi_dif, with identical beta distributions for rho_1 and rho_2 and a Frank
+    and chi_dif, with identical beta distributions for rho_1 and rho_2 and a
     copula correlating mass ratio and chi_eff. The second being identical beta 
     distributions for chi_1 and chi_2 with a uniform distribution for cosine tilts.
     """
     def __init__(self, mmin=2, mmax=100):
-        super(SPSMD_EffectiveCopula, self).__init__(mmin, mmax)
+        super(SPSMDEffectiveCopulaBase, self).__init__(mmin, mmax)
         self.chi_effs = xp.linspace(-1, 1, 500)
     
     def __call__(self, dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m,
                  mu_chi_eff, log_sigma_chi_eff, chi_eff_min, chi_eff_skew, kappa_q_chi_eff, 
                  mu_chi_dif, log_sigma_chi_dif, chi_dif_min, chi_dif_max, chi_dif_skew,
                  alpha_rho, beta_rho, amax,
-                 xi_spin, alpha_chi, beta_chi,
                  lambda_chi_peak=0):
         """
         Parameters
@@ -68,36 +67,26 @@ class SPSMD_EffectiveCopula(SinglePeakSmoothedMassDistribution):
         amax: float
             Maximum allowed spin magnitude.
         """ 
-        p_mass = super(SPSMD_EffectiveCopula, self).__call__(
+        p_mass = super(SPSMDEffectiveCopulaBase, self).__call__(
             dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m)
         
-        p_field = self.p_field(dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m,
+        p_spin = self.p_spin(dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m,
                 mu_chi_eff, 10**log_sigma_chi_eff, chi_eff_min, chi_eff_skew, kappa_q_chi_eff, 
                 mu_chi_dif, 10**log_sigma_chi_dif, chi_dif_min, chi_dif_max, chi_dif_skew,
                 alpha_rho, beta_rho, amax)
-        if xi_spin == 1:
-            return p_mass*p_field
-        
-        p_dynamical = self.p_dynamical(dataset, alpha_chi, beta_chi, amax)
-        
-        prob = p_mass*(xi_spin*p_field + (1.-xi_spin)*p_dynamical)
+                
+        prob = p_mass*p_spin
         return prob
     
-    def p_field(self, dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m,
+    def p_spin(self, dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m,
                 mu_chi_eff, sigma_chi_eff, chi_eff_min, chi_eff_skew, kappa_q_chi_eff, 
                 mu_chi_dif, sigma_chi_dif, chi_dif_min, chi_dif_max, chi_dif_skew,
                 alpha_rho, beta_rho, amax):
-        p_field = self.p_chi_eff(dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m,
+        p_spin = self.p_chi_eff(dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m,
                                  mu_chi_eff, sigma_chi_eff, chi_eff_min, chi_eff_skew, kappa_q_chi_eff)
-        p_field *= self.p_chi_dif(dataset, mu_chi_dif, sigma_chi_dif, chi_dif_max, chi_dif_min, chi_dif_skew)
-        p_field *= self.p_rho(dataset, alpha_rho, beta_rho, amax)
-        return p_field/dataset["prior_jacobian"]
-        
-    def p_dynamical(self, dataset, alpha_chi, beta_chi, amax):
-        p_dynamical = beta_dist(dataset["a_1"], alpha=alpha_chi, beta=beta_chi, scale=amax)
-        p_dynamical *= beta_dist(dataset["a_2"], alpha=alpha_chi, beta=beta_chi, scale=amax)
-        p_dynamical /= 4
-        return p_dynamical
+        p_spin *= self.p_chi_dif(dataset, mu_chi_dif, sigma_chi_dif, chi_dif_max, chi_dif_min, chi_dif_skew)
+        p_spin *= self.p_rho(dataset, alpha_rho, beta_rho, amax)
+        return p_spin
     
     def p_chi_eff(self, dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m,
                   mu_chi_eff, sigma_chi_eff, chi_eff_min, chi_eff_skew, kappa_q_chi_eff):
@@ -106,7 +95,7 @@ class SPSMD_EffectiveCopula(SinglePeakSmoothedMassDistribution):
         p_chi_eff = truncskewnorm(dataset["chi_eff"], mu=mu_chi_eff, sigma=sigma_chi_eff,
                                   high=1, low=chi_eff_min, skew=chi_eff_skew)
         p_chi_eff /= chi_eff_norm
-        p_chi_eff *= frank_copula(u, v, kappa_q_chi_eff)
+        p_chi_eff *= self.copula_function(u, v, kappa_q_chi_eff)
         return p_chi_eff
         
     def p_chi_dif(self, dataset, mu_chi_dif, sigma_chi_dif, chi_dif_max, chi_dif_min, chi_dif_skew):
@@ -124,6 +113,9 @@ class SPSMD_EffectiveCopula(SinglePeakSmoothedMassDistribution):
         p_rho = beta_dist(dataset["rho_1"], alpha=alpha_rho, beta=beta_rho, scale=amax)
         p_rho *= beta_dist(dataset["rho_2"], alpha=alpha_rho, beta=beta_rho, scale=amax)
         return p_rho
+    
+    def copula_function(self, u, v, kappa):
+        raise NotImplementedError
     
     def copula_coords(self, dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m,
                       mu_chi_eff, sigma_chi_eff, chi_eff_min, chi_eff_skew):
@@ -172,3 +164,27 @@ class SPSMD_EffectiveCopula(SinglePeakSmoothedMassDistribution):
         res_v = xp.interp(dataset["chi_eff"], self.chi_effs, v)
         
         return res_u, res_v, chi_eff_norm
+
+
+class SPSMDEffectiveFrankCopula(SPSMDEffectiveCopulaBase):
+    """
+    SPSMDEffectiveCopulaBase model with Frank copula density.
+    """
+    def copula_function(self, u, v, kappa):
+        return frank_copula(u, v, kappa)
+
+    
+class SPSMDEffectiveGaussianCopula(SPSMDEffectiveCopulaBase):
+    """
+    SPSMDEffectiveCopulaBase model with Gaussian copula density.
+    """
+    def copula_function(self, u, v, kappa):
+        return gaussian_copula(u, v, kappa)
+    
+    
+class SPSMDEffectiveFGMCopula(SPSMDEffectiveCopulaBase):
+    """
+    SPSMDEffectiveCopulaBase model with FGM copula density.
+    """
+    def copula_function(self, u, v, kappa):
+        return fgm_copula(u, v, kappa)

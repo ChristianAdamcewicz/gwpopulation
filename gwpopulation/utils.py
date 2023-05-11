@@ -4,7 +4,7 @@ Helper functions for probability distributions.
 
 import os
 
-from .cupy_utils import erf, betaln, xp
+from .cupy_utils import erf, betaln, xp, erfinv
 
 
 def beta_dist(xx, alpha, beta, scale=1):
@@ -170,12 +170,66 @@ def frank_copula(u, v, kappa):
         The distribution evaluated at (u,v)
     """
     if kappa == 0:
-        prob = 1.
-    else:
-        expkap = xp.exp(kappa)
-        expkapuv = expkap**(u + v)
-        prob = kappa * expkapuv * (expkap - 1) / (expkap - expkap**u - expkap**v + expkapuv)**2
+        return 1.
+    expkap = xp.exp(kappa)
+    expkapuv = expkap**(u + v)
+    prob = kappa * expkapuv * (expkap - 1) / (expkap - expkap**u - expkap**v + expkapuv)**2
     return xp.nan_to_num(prob)
+
+
+def gaussian_copula(u, v, kappa):
+    """
+    Gaussian copula density function.
+    
+    Parameters
+    ----------
+    u: float, array-like
+        CDF of first parameter.
+    v: float, array-like
+        CDF of second parameter.
+    kappa: float
+        Level of correlation
+
+    Returns
+    -------
+    prob: float, array-like
+        The distribution evaluated at (u,v)
+    """
+    if kappa < -1 or kappa > 1:
+        raise ValueError(f"kappa must be in range (-1,1), kappa={kappa}")
+    if kappa == 0:
+        return 1.
+    a = xp.sqrt(2) * erfinv(2*u - 1.)
+    b = xp.sqrt(2) * erfinv(2*v - 1.)
+    kappa2 = kappa**2
+    prob = xp.exp(-((a**2 + b**2)*kappa2 - 2*a*b*kappa) / (2*(1. - kappa2))) / xp.sqrt(1. - kappa2)
+    return xp.nan_to_num(prob)
+
+
+def fgm_copula(u, v, kappa):
+    """
+    Frank copula density function.
+    
+    Parameters
+    ----------
+    u: float, array-like
+        CDF of first parameter.
+    v: float, array-like
+        CDF of second parameter.
+    kappa: float
+        Level of correlation
+
+    Returns
+    -------
+    prob: float, array-like
+        The distribution evaluated at (u,v)
+    """
+    if kappa < -1 or kappa > 1:
+        raise ValueError(f"kappa must be in range (-1,1), kappa={kappa}")
+    if kappa == 0:
+        return 1.
+    prob = 1. + kappa*(1. - 2*u)*(1. - 2*v)
+    return prob
 
 
 def unnormalized_2d_gaussian(xx, yy, mu_x, mu_y, sigma_x, sigma_y, covariance):
