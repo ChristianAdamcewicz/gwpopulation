@@ -70,7 +70,9 @@ def convert_to_beta_parameters(parameters, remove=True):
         added_keys.append('chi_dif_min_con')
     if 'chi_dif_max' in parameters.keys():
         converted['chi_dif_max_con'] = parameters['chi_dif_max'] - parameters['mu_chi_dif']
+        converted['chi_dif_cut_con'] = parameters['chi_dif_max'] - parameters['chi_dif_min']
         added_keys.append('chi_dif_max_con')
+        added_keys.append('chi_dif_cut_con')
 
     return converted, added_keys
 

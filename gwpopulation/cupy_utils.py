@@ -4,12 +4,12 @@ Helper functions for missing functionality in cupy.
 
 try:
     import cupy as xp
-    from cupyx.scipy.special import erf, gammaln
+    from cupyx.scipy.special import erf, gammaln, erfinv
 
     CUPY_LOADED = True
 except ImportError:
     import numpy as xp
-    from scipy.special import erf, gammaln
+    from scipy.special import erf, gammaln, erfinv
 
     CUPY_LOADED = False
 
