@@ -1055,6 +1055,64 @@ class _SmoothedMassDistribution(object):
         window[(masses < mmin) | (masses > mmax)] = 0
         return window
 
+class SinglePeakSmoothedNonidenticalPairingMassDistribution(_SmoothedMassDistribution,
+                                                            _PairingMassDistribution):
+    def __init__(self,mmin=2.0, mmax=100.):
+        _PairingMassDistribution.__init__(self,mmin=mmin,mmax=mmax)
+        _SmoothedMassDistribution.__init__(self)
+
+    def pairing(self, dataset, beta_q):
+        mass_ratio = dataset["mass_2"]/dataset["mass_1"]
+        return powerlaw(mass_ratio, beta_q, 1, self.qmin)
+    
+    def p1_m1(self, mass, alpha1, mmin1, mmax1, lam1, mpp1, sigpp1, delta_m1):
+        return self.p_m(mass, alpha1, mmin1, mmax1, lam1, mpp1, sigpp1, delta_m1)
+    def p2_m2(self, mass, alpha2, mmin2, mmax2, lam2, mpp2, sigpp2, delta_m2):
+        return self.p_m(mass, alpha2, mmin2, mmax2, lam2, mpp2, sigpp2, delta_m2)
+
+    def p_m(self, mass, alpha, mmin, mmax, lam, mpp, sigpp, delta_m):
+        p_m = two_component_single(
+            mass,
+            alpha=alpha,
+            mmin=mmin,
+            mmax=mmax,
+            lam=lam,
+            mpp=mpp,
+            sigpp=sigpp,
+        )
+        p_m *= self.smoothing(mass, mmin=mmin, mmax=mmax, delta_m=delta_m)
+        norm = self.norm_p_m1(
+            alpha=alpha,
+            mmin=mmin,
+            mmax=mmax,
+            lam=lam,
+            mpp=mpp,
+            sigpp=sigpp,
+             delta_m=delta_m,
+        )
+        return p_m / norm
+    
+    def norm_p_m1(self, alpha, mmin, mmax, lam, mpp, sigpp, delta_m):
+        """Calculate the normalisation factor for the primary mass"""
+        if delta_m == 0.0:
+            return 1
+        p_m = two_component_single(
+            self.m1s, alpha=alpha, mmin=mmin, mmax=mmax, lam=lam, mpp=mpp, sigpp=sigpp
+        )
+        p_m *= self.smoothing(self.m1s, mmin=mmin, mmax=mmax, delta_m=delta_m)
+
+        norm = trapz(p_m, self.m1s)
+        return norm
+
+    def __call__(self, dataset, alpha1, mmin1, mmax1, lam1, mpp1, sigpp1,delta_m1,
+                 alpha2, mmin2, mmax2, lam2, mpp2, sigpp2, delta_m2,
+                 beta_q
+                 ):
+        # get arguments in a dict
+        kwargs = locals()
+        kwargs.pop('self')
+        return self.p_m1_m2(**kwargs)
+
 class SinglePeakSmoothedPairingMassDistribution(_SmoothedMassDistribution,
                                                 _IdenticalPairingMassDistribution):
     def __init__(self,mmin=2.0, mmax=100.):
