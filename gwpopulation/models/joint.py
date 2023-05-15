@@ -16,7 +16,7 @@ class SPSMDEffectiveCopulaBase(SinglePeakSmoothedMassDistribution):
         self.chi_effs = xp.linspace(-1, 1, 500)
     
     def __call__(self, dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m,
-                 mu_chi_eff, log_sigma_chi_eff, chi_eff_min, chi_eff_skew, kappa_q_chi_eff, 
+                 mu_chi_eff, log_sigma_chi_eff, chi_eff_min, chi_eff_max, chi_eff_skew, kappa_q_chi_eff, 
                  mu_chi_dif, log_sigma_chi_dif, chi_dif_min, chi_dif_max, chi_dif_skew,
                  alpha_rho, beta_rho, amax,
                  lambda_chi_peak=0):
@@ -47,6 +47,8 @@ class SPSMDEffectiveCopulaBase(SinglePeakSmoothedMassDistribution):
             Log_10 of standard deviation for chi_eff Gaussian.
         chi_eff_min: float
             Minimum allowed chi_eff.
+        chi_eff_max: float
+            Maximum allowed chi_eff.
         chi_eff_skew: float
             Skewness of chi_eff Gaussian.
         kappa_q_chi_eff: float
@@ -70,7 +72,7 @@ class SPSMDEffectiveCopulaBase(SinglePeakSmoothedMassDistribution):
             dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m)
         
         p_spin = self.p_spin(dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m,
-                mu_chi_eff, 10**log_sigma_chi_eff, chi_eff_min, chi_eff_skew, kappa_q_chi_eff, 
+                mu_chi_eff, 10**log_sigma_chi_eff, chi_eff_min, chi_eff_max, chi_eff_skew, kappa_q_chi_eff, 
                 mu_chi_dif, 10**log_sigma_chi_dif, chi_dif_min, chi_dif_max, chi_dif_skew,
                 alpha_rho, beta_rho, amax)
                 
@@ -78,21 +80,23 @@ class SPSMDEffectiveCopulaBase(SinglePeakSmoothedMassDistribution):
         return prob
     
     def p_spin(self, dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m,
-                mu_chi_eff, sigma_chi_eff, chi_eff_min, chi_eff_skew, kappa_q_chi_eff, 
+                mu_chi_eff, sigma_chi_eff, chi_eff_min, chi_eff_max, chi_eff_skew, kappa_q_chi_eff, 
                 mu_chi_dif, sigma_chi_dif, chi_dif_min, chi_dif_max, chi_dif_skew,
                 alpha_rho, beta_rho, amax):
         p_spin = self.p_chi_eff(dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m,
-                                 mu_chi_eff, sigma_chi_eff, chi_eff_min, chi_eff_skew, kappa_q_chi_eff)
+                                mu_chi_eff, sigma_chi_eff, chi_eff_max, chi_eff_min, chi_eff_skew,
+                                kappa_q_chi_eff)
         p_spin *= self.p_chi_dif(dataset, mu_chi_dif, sigma_chi_dif, chi_dif_max, chi_dif_min, chi_dif_skew)
         p_spin *= self.p_rho(dataset, alpha_rho, beta_rho, amax)
         return p_spin
     
     def p_chi_eff(self, dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m,
-                  mu_chi_eff, sigma_chi_eff, chi_eff_min, chi_eff_skew, kappa_q_chi_eff):
+                  mu_chi_eff, sigma_chi_eff, chi_eff_max, chi_eff_min, chi_eff_skew,
+                  kappa_q_chi_eff):
         u, v, chi_eff_norm = self.copula_coords(dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m,
-                                                mu_chi_eff, sigma_chi_eff, chi_eff_min, chi_eff_skew)
+                                                mu_chi_eff, sigma_chi_eff, chi_eff_max, chi_eff_min, chi_eff_skew)
         p_chi_eff = truncskewnorm(dataset["chi_eff"], mu=mu_chi_eff, sigma=sigma_chi_eff,
-                                  high=1, low=chi_eff_min, skew=chi_eff_skew)
+                                  high=chi_eff_max, low=chi_eff_min, skew=chi_eff_skew)
         p_chi_eff /= chi_eff_norm
         p_chi_eff *= self.copula_function(u, v, kappa_q_chi_eff)
         return p_chi_eff
@@ -117,7 +121,7 @@ class SPSMDEffectiveCopulaBase(SinglePeakSmoothedMassDistribution):
         raise NotImplementedError
     
     def copula_coords(self, dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m,
-                      mu_chi_eff, sigma_chi_eff, chi_eff_min, chi_eff_skew):
+                      mu_chi_eff, sigma_chi_eff, chi_eff_max, chi_eff_min, chi_eff_skew):
         '''Get u(q)'''
         # p(m1) grid
         p_m = two_component_single(
@@ -151,7 +155,7 @@ class SPSMDEffectiveCopulaBase(SinglePeakSmoothedMassDistribution):
         '''get v(chi_eff)'''
         # p(chi_eff) grid
         p_chi_eff = truncskewnorm(self.chi_effs, mu=mu_chi_eff, sigma=sigma_chi_eff,
-                                  high=1, low=chi_eff_min, skew=chi_eff_skew)
+                                  high=chi_eff_max, low=chi_eff_min, skew=chi_eff_skew)
         
         # v(chi_eff) grid
         v = cumtrapz(p_chi_eff, self.chi_effs, initial=0)
