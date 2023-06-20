@@ -2,6 +2,7 @@
 Parameter conversions
 """
 
+import numpy as np
 
 def convert_to_beta_parameters(parameters, remove=True):
     """
@@ -63,14 +64,18 @@ def convert_to_beta_parameters(parameters, remove=True):
             _ = _convert("", param)
     
     for param in ['chi_eff', 'chi_dif']:
+        converted[f'xi_{param}'], converted[f'omega_{param}'], converted[f'{param}_skew'] = (
+            mu_var_gamma_to_xi_omega_alpha(
+                parameters[f'mu_{param}'], parameters[f'sigma_{param}'], parameters[f'gamma_{param}']))
+        added_keys.append(f'xi_{param}')
+        added_keys.append(f'omega_{param}')
+        added_keys.append(f'{param}_skew')
         if f'{param}_min' in parameters.keys():
             converted[f'{param}_min_con'] = parameters[f'mu_{param}'] - parameters[f'{param}_min']
             added_keys.append(f'{param}_min_con')
         if f'{param}_max' in parameters.keys():
             converted[f'{param}_max_con'] = parameters[f'{param}_max'] - parameters[f'mu_{param}']
-            converted[f'{param}_cut_con'] = parameters[f'{param}_max'] - parameters[f'{param}_min']
             added_keys.append(f'{param}_max_con')
-            added_keys.append(f'{param}_cut_con')
 
     return converted, added_keys
 
@@ -139,3 +144,34 @@ def mu_var_max_to_alpha_beta_max(mu, var, amax):
     alpha = (mu ** 2 * (1 - mu) - mu * var) / var
     beta = (mu * (1 - mu) ** 2 - (1 - mu) * var) / var
     return alpha, beta, amax
+
+
+def mu_var_gamma_to_xi_omega_alpha(mu, var, gamma):
+    """
+    Convert between parameters for skew norm distribution
+    
+    Parameters
+    ==========
+    mu : float
+        The mean
+    var : float
+        The variance
+    gamma : float
+        The skewness
+        
+    Returns
+    =======
+    xi : float
+        Shape parameter
+    omega : float
+        Shape parameter
+    alpha : float
+        Shape parameter
+    """
+    delta = np.sqrt(np.pi/(2 * (
+        1 + ((4 - np.pi) / (2*np.abs(gamma)))**(2/3))))
+    delta *= np.sign(gamma)
+    alpha = delta / np.sqrt(1 - delta**2)
+    omega = np.sqrt(var / (1 - 2*delta**2/np.pi))
+    xi = mu - omega*delta*np.sqrt(2/np.pi)
+    return xi, omega, alpha

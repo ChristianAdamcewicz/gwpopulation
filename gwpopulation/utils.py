@@ -119,34 +119,11 @@ def truncnorm(xx, mu, sigma, high, low):
     return prob
 
 
-def truncskewnorm(xx, mu, sigma, high, low, skew):
-    '''
-    Unnormalised truncated skewed normal distribution.
-    
-    Parameters
-    ----------
-    xx: float, array-like
-        The abscissa values (:math:`x`)
-    mu: float, array-like
-        The mean of the normal distribution (:math:`\mu`)
-    sigma: float
-        The standard deviation of the distribution (:math:`\sigma`)
-    high: float, array-like
-        The maximum of the distribution (:math:`x_\min`)
-    low: float, array-like
-        The minimum of the distribution (:math:`x_\max`)
-    skew: float, array-like
-        Skewness of the distribution
-
-    Returns
-    -------
-    prob: float, array-like
-        The distribution evaluated at `xx`
-    '''
-    if sigma <= 0:
-        raise ValueError(f"Sigma must be greater than 0, sigma={sigma}")
-    prob = xp.exp(-xp.power(xx - mu, 2) / (2 * sigma ** 2))
-    prob *= (1 + erf(skew * (xx - mu) / (xp.sqrt(2) * sigma)))
+def truncskewnorm(xx, xi, omega, high, low, skew):
+    if omega <= 0:
+        raise ValueError(f"omega must be greater than 0, omega={omega}")
+    prob = xp.exp(-xp.power(xx - xi, 2) / (2 * omega ** 2))
+    prob *= (1 + erf(skew * (xx - xi) / (xp.sqrt(2) * omega)))
     prob *= (xx <= high) & (xx >= low)
     return xp.nan_to_num(prob)
 
