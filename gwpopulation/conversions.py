@@ -76,7 +76,7 @@ def convert_to_beta_parameters(parameters, remove=True):
         if f'{param}_max' in parameters.keys():
             converted[f'{param}_max_con'] = parameters[f'{param}_max'] - parameters[f'mu_{param}']
             added_keys.append(f'{param}_max_con')
-
+    
     return converted, added_keys
 
 
