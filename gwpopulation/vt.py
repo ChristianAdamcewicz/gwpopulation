@@ -160,14 +160,18 @@ class ResamplingVT(_BaseVT):
         return vt_factor
 
     def detection_efficiency(self, parameters):
-        self.model.parameters.update(parameters)
-        weights = self.model.prob(self.data) / self.data["prior"]
+        weights = self.weights(parameters)
         mu = float(xp.sum(weights) / self.total_injections)
         var = float(
             xp.sum(weights**2) / self.total_injections**2
             - mu**2 / self.total_injections
         )
         return mu, var
+
+    def weights(self, parameters):
+        self.model.parameters.update(parameters)
+        weights = self.model.prob(self.data) / self.data["prior"]
+        return weights
 
     def surveyed_hypervolume(self, parameters):
         r"""
@@ -194,3 +198,138 @@ class ResamplingVT(_BaseVT):
             return (
                 self.redshift_model.normalisation(parameters) / 1e9 * self.analysis_time
             )
+        
+
+class ResamplingVTtwo(ResamplingVT):
+    def __init__(
+            self,
+            model,
+            model2,
+            data,
+            data2,
+            n_events=np.inf,
+            marginalize_uncertainty=False,
+            enforce_convergence=True
+            ):
+        super(ResamplingVTtwo, self).__init__(
+            model,
+            data,
+            n_events,
+            marginalize_uncertainty,
+            enforce_convergence)
+        
+        self.data2 = data2
+        if isinstance(model2, list):
+            model2 = Model(model2)
+        elif not isinstance(model2, Model):
+            model2 = Model([model2])
+        self.model2 = model2
+        self.total_injections += data2.get("total_generated", len(data2["prior"]))
+
+    def weights(self, parameters):
+        self.model.parameters.update(parameters)
+        self.model2.parameters.update(parameters)
+        weights = self.model.prob(self.data) / (self.data["prior"] / 2)
+        weights2 = self.model2.prob(self.data2) / (self.data2["prior"] / 2)
+        weights *= parameters["likelihood_mix"]
+        weights2 *= (1. - parameters["likelihood_mix"])
+        weights = xp.append(weights, weights2)
+        return weights
+    
+
+class ResamplingVTthree(ResamplingVTtwo):
+    def __init__(
+            self,
+            model,
+            model2,
+            model3,
+            data,
+            data2,
+            data3,
+            n_events=np.inf,
+            marginalize_uncertainty=False,
+            enforce_convergence=True
+            ):
+        super(ResamplingVTthree, self).__init__(
+            model,
+            model2,
+            data,
+            data2,
+            n_events,
+            marginalize_uncertainty,
+            enforce_convergence)
+        
+        self.data3 = data3
+        if isinstance(model3, list):
+            model3 = Model(model3)
+        elif not isinstance(model3, Model):
+            model3 = Model([model3])
+        self.model3 = model3
+        self.total_injections += data3.get("total_generated", len(data3["prior"]))
+
+    def weights(self, parameters):
+        self.model.parameters.update(parameters)
+        self.model2.parameters.update(parameters)
+        self.model3.parameters.update(parameters)
+        weights = self.model.prob(self.data) / (self.data["prior"] / 3)
+        weights2 = self.model2.prob(self.data2) / (self.data2["prior"] / 3)
+        weights3 = self.model3.prob(self.data3) / (self.data3["prior"] / 3)
+        weights *= parameters["likelihood_mix"]
+        weights2 *= (1. - parameters["likelihood_mix"]) * parameters["likelihood_mix2"]
+        weights3 *= (1. - parameters["likelihood_mix"]) * (1. - parameters["likelihood_mix2"])
+        weights = xp.append(weights, weights2)
+        weights = xp.append(weights, weights3)
+        return weights
+    
+
+class ResamplingVTfour(ResamplingVTthree):
+    def __init__(
+            self,
+            model,
+            model2,
+            model3,
+            model4,
+            data,
+            data2,
+            data3,
+            data4,
+            n_events=np.inf,
+            marginalize_uncertainty=False,
+            enforce_convergence=True
+            ):
+        super(ResamplingVTfour, self).__init__(
+            model,
+            model2,
+            model3,
+            data,
+            data2,
+            data3,
+            n_events,
+            marginalize_uncertainty,
+            enforce_convergence)
+        
+        self.data4 = data4
+        if isinstance(model4, list):
+            model4 = Model(model4)
+        elif not isinstance(model4, Model):
+            model4 = Model([model4])
+        self.model4 = model4
+        self.total_injections += data4.get("total_generated", len(data4["prior"]))
+
+    def weights(self, parameters):
+        self.model.parameters.update(parameters)
+        self.model2.parameters.update(parameters)
+        self.model3.parameters.update(parameters)
+        self.model4.parameters.update(parameters)
+        weights = self.model.prob(self.data) / (self.data["prior"] / 4)
+        weights2 = self.model2.prob(self.data2) / (self.data2["prior"] / 4)
+        weights3 = self.model3.prob(self.data3) / (self.data3["prior"] / 4)
+        weights4 = self.model4.prob(self.data4) / (self.data4["prior"] / 4)
+        weights *= parameters["likelihood_mix"]
+        weights2 *= (1. - parameters["likelihood_mix"]) * parameters["likelihood_mix2"]
+        weights3 *= (1. - parameters["likelihood_mix"]) * (1. - parameters["likelihood_mix2"]) * parameters["likelihood_mix3"]
+        weights4 *= (1. - parameters["likelihood_mix"]) * (1. - parameters["likelihood_mix2"]) * (1. - parameters["likelihood_mix3"])
+        weights = xp.append(weights, weights2)
+        weights = xp.append(weights, weights3)
+        weights = xp.append(weights, weights4)
+        return weights

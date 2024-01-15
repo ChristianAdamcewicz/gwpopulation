@@ -122,7 +122,7 @@ def independent_spin_magnitude_beta(
     return prior
 
 
-def iid_spin_orientation_gaussian_isotropic(dataset, xi_spin, sigma_spin):
+def iid_spin_orientation_gaussian_isotropic(dataset, xi_spin, sigma_spin, mu_spin):
     r"""A mixture model of spin orientations with isotropic and normally
     distributed components. The distribution of primary and secondary spin
     orientations are expected to be identical and independent.
@@ -146,39 +146,39 @@ def iid_spin_orientation_gaussian_isotropic(dataset, xi_spin, sigma_spin):
         Width of preferentially aligned component.
     """
     return independent_spin_orientation_gaussian_isotropic(
-        dataset, xi_spin, sigma_spin, sigma_spin
+        dataset, xi_spin, sigma_spin, sigma_spin, mu_spin, mu_spin
     )
 
 
-def inp_spin_orientation_gaussian_isotropic(dataset, sigma_1):
+def inp_spin_orientation_gaussian_isotropic(dataset, mu_spin_1, sigma_1):
     r"""
     """
-    prior = truncnorm(dataset["cos_tilt_1"], 1, sigma_1, 1, -1)
+    prior = truncnorm(dataset["cos_tilt_1"], mu_spin_1, sigma_1, 1, -1)
     return prior
 
 
-def iip_spin_orientation_gaussian_isotropic(dataset, sigma_spin):
+def iip_spin_orientation_gaussian_isotropic(dataset, mu_spin, sigma_spin):
     r"""
     """
-    prior = truncnorm(dataset["cos_tilt_1"], 1, sigma_spin, 1, -1)
+    prior = truncnorm(dataset["cos_tilt_1"], mu_spin, sigma_spin, 1, -1)
     return prior
 
 
-def ins_spin_orientation_gaussian_isotropic(dataset, sigma_2):
+def ins_spin_orientation_gaussian_isotropic(dataset, mu_spin_2, sigma_2):
     r"""
     """
-    prior = truncnorm(dataset["cos_tilt_2"], 1, sigma_2, 1, -1)
+    prior = truncnorm(dataset["cos_tilt_2"], mu_spin_2, sigma_2, 1, -1)
     return prior
 
 
-def iis_spin_orientation_gaussian_isotropic(dataset, sigma_spin):
+def iis_spin_orientation_gaussian_isotropic(dataset, mu_spin, sigma_spin):
     r"""
     """
-    prior = truncnorm(dataset["cos_tilt_2"], 1, sigma_spin, 1, -1)
+    prior = truncnorm(dataset["cos_tilt_2"], mu_spin, sigma_spin, 1, -1)
     return prior
 
 
-def independent_spin_orientation_gaussian_isotropic(dataset, xi_spin, sigma_1, sigma_2):
+def independent_spin_orientation_gaussian_isotropic(dataset, xi_spin, sigma_1, sigma_2, mu_spin_1, mu_spin_2):
     r"""A mixture model of spin orientations with isotropic and normally
     distributed components.
 
@@ -205,8 +205,8 @@ def independent_spin_orientation_gaussian_isotropic(dataset, xi_spin, sigma_1, s
         massive black hole (:math:`\sigma_2`).
     """
     prior = (1 - xi_spin) / 4 + xi_spin * truncnorm(
-        dataset["cos_tilt_1"], 1, sigma_1, 1, -1
-    ) * truncnorm(dataset["cos_tilt_2"], 1, sigma_2, 1, -1)
+        dataset["cos_tilt_1"], mu_spin_1, sigma_1, 1, -1
+    ) * truncnorm(dataset["cos_tilt_2"], mu_spin_2, sigma_2, 1, -1)
     return prior
 
 
