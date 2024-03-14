@@ -221,10 +221,10 @@ def unnormalized_2d_gaussian(xx, yy, mu_x, mu_y, sigma_x, sigma_y, covariance):
     return prob
 
 
-def effective_jacobian(q, a1, a2, z1, z2):
+def effective_jacobian(q, a_1, a_2, cos_tilt_1, cos_tilt_2):
     """
     Computes the Jacobian:
-    |d(chi_eff, chi_dif, rho_1, rho_2)/d(a_1, a_2, z_1, z_2)|^-1
+    |d(chi_eff, chi_dif, rho_1, rho_2)/d(a_1, a_2, cos_tilt_1, cos_tilt_2)|^-1
     
     Parameters
     ----------
@@ -246,9 +246,9 @@ def effective_jacobian(q, a1, a2, z1, z2):
     """
     import numpy as np
     log_numerator = np.nan_to_num(
-        2*np.log(1.+q) + 0.5*(np.log(1.-z1**2) + np.log(1.-z2**2)))
+        2*np.log(1.+q) + 0.5*(np.log(1.-cos_tilt_1**2) + np.log(1.-cos_tilt_2**2)))
     log_denominator = np.nan_to_num(
-        np.log(1.+q**2) + np.log(a1) + np.log(a2))
+        np.log(1.+q**2) + np.log(a_1) + np.log(a_2))
     log_result = log_numerator - log_denominator
     result = np.exp(log_result)
     return np.nan_to_num(result)

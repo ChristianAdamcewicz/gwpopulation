@@ -163,3 +163,57 @@ def cumtrapz(y, x=None, dx=1.0, axis=-1, initial=0):
                              axis=axis)
     
     return res
+
+
+def FPMIN(arr, minval = 1.0e-30):
+    arr[(arr < minval)] = minval
+
+def betacf(a, b, x):
+    MAXIT = 100
+    EPS = 3.0e-7
+
+    qab = a + b
+    qap = a + 1.0
+    qam = a - 1.0
+    c = 1.0
+    d = 1.0 - qab * x/qap
+    FPMIN(d)
+    d = 1.0/d
+    h = d
+
+    for m in range(1, MAXIT+1):
+        m2 = 2*m
+        aa = m * (b-m) * x/((qam+m2) * (a+m2))
+        d = 1.0 + aa*d
+        FPMIN(d)
+        c = 1.0 + aa/c
+        FPMIN(c)
+        d = 1.0/d
+        h *= d*c
+        aa = -(a+m) * (qab+m) * x/((a+m2) * (qap+m2))
+        d = 1.0 + aa*d
+        FPMIN(d)
+        c = 1.0 + aa/c
+        FPMIN(c)
+        d = 1.0/d
+        dell = d*c
+        h *= dell
+        if abs(xp.all(h) - 1) < EPS:
+            break
+
+    return h
+
+def betainc(a,b,x):
+    result = xp.zeros(xp.shape(x))
+
+    cut = ((x > 0.0) & (x < 1.0))
+    cut1 = ((x < 0.0) | (x > 1.0))
+    cut2 = (x < (a + 1.0)/(a + b + 2.0))
+
+    result[cut] = xp.exp(gammaln(a+b)-gammaln(a)-gammaln(b) + a*xp.log(x[cut]) + b*xp.log(1.0 - x[cut]))
+    result[cut1] = xp.nan
+
+    result[cut2] = result[cut2] * betacf(a,b,x[cut2])/a
+    result[~cut2] = 1.0 - result[~cut2] * betacf(b,a,1.0 - x[~cut2])/b
+
+    return result
