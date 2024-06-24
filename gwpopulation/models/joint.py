@@ -6,7 +6,12 @@ import inspect
 from ..cupy_utils import trapz, cumtrapz, betainc, xp
 from ..utils import frank_copula, powerlaw, beta_dist, truncnorm
 
-from .mass import BaseSmoothedMassDistribution, BaseSmoothedComponentMassDistribution, two_component_single
+from .mass import (
+    BaseSmoothedMassDistribution,
+    BaseSmoothedComponentMassDistribution,
+    two_component_single,
+    three_component_single,
+)
 from .spin import EffectiveSpin
 
 
@@ -144,7 +149,7 @@ class MassPrimarySpinCopulaBase(MassSingleSpinCopulaBase):
     """
     def __init__(self, mmin=2, mmax=100, normalization_shape=1000):
         self.spin_keys = ["alpha_chi", "beta_chi", "sigma_spin"]
-        self.kappa_keys = ["kappa1"]
+        self.kappa_keys = ["kappa_s1"]
         MassSingleSpinCopulaBase.__init__(self, mmin, mmax, normalization_shape)
     
     def spin_model(self, dataset, alpha_chi, beta_chi, sigma_spin):
@@ -163,10 +168,10 @@ class MassPrimarySpinCopulaBase(MassSingleSpinCopulaBase):
         v1 = betainc(alpha_chi, beta_chi, dataset["a_1"])
         return v1
 
-    def copula(self, dataset, kappa1, alpha_chi, beta_chi, sigma_spin):
+    def copula(self, dataset, kappa_s1, alpha_chi, beta_chi, sigma_spin):
         u1 = xp.interp(dataset["mass_1"], self.ms, self.u1)
         v1 = self.get_v(dataset, alpha_chi, beta_chi)
-        copula1 = frank_copula(u1, v1, kappa1)
+        copula1 = frank_copula(u1, v1, kappa_s1)
         return copula1
     
 
@@ -181,12 +186,23 @@ class MassPrimarySpinCopulaSPSMD(MassPrimarySpinCopulaBase):
         return dict(gaussian_mass_maximum=self.mmax)
 
 
+class MassPrimarySpinCopulaMPSMD(MassPrimarySpinCopulaBase):
+    """
+    """
+
+    mass_model = three_component_single
+
+    @property
+    def kwargs(self):
+        return dict(gaussian_mass_maximum=self.mmax)
+
+
 class MassSecondarySpinCopulaBase(MassSingleSpinCopulaBase):
     """
     """
     def __init__(self, mmin=2, mmax=100, normalization_shape=1000):
         self.spin_keys = ["alpha_chi", "beta_chi", "sigma_spin"]
-        self.kappa_keys = ["kappa2"]
+        self.kappa_keys = ["kappa_s2"]
         MassSingleSpinCopulaBase.__init__(self, mmin, mmax, normalization_shape)
     
     def spin_model(self, dataset, alpha_chi, beta_chi, sigma_spin):
@@ -205,10 +221,10 @@ class MassSecondarySpinCopulaBase(MassSingleSpinCopulaBase):
         v2 = betainc(alpha_chi, beta_chi, dataset["a_2"])
         return v2
 
-    def copula(self, dataset, kappa2, alpha_chi, beta_chi, sigma_spin):
+    def copula(self, dataset, kappa_s2, alpha_chi, beta_chi, sigma_spin):
         u2 = xp.interp(dataset["mass_2"], self.ms, self.u2)
         v2 = self.get_v(dataset, alpha_chi, beta_chi)
-        copula2 = frank_copula(u2, v2, kappa2)
+        copula2 = frank_copula(u2, v2, kappa_s2)
         return copula2
     
 
@@ -223,12 +239,23 @@ class MassSecondarySpinCopulaSPSMD(MassSecondarySpinCopulaBase):
         return dict(gaussian_mass_maximum=self.mmax)
 
 
+class MassSecondarySpinCopulaMPSMD(MassSecondarySpinCopulaBase):
+    """
+    """
+
+    mass_model = three_component_single
+
+    @property
+    def kwargs(self):
+        return dict(gaussian_mass_maximum=self.mmax)
+
+
 class MassBothSpinCopulaBase(MassSingleSpinCopulaBase):
     """
     """
     def __init__(self, mmin=2, mmax=100, normalization_shape=1000):
         self.spin_keys = ["alpha_chi", "beta_chi", "sigma_spin"]
-        self.kappa_keys = ["kappa1", "kappa2"]
+        self.kappa_keys = ["kappa_b1", "kappa_b2"]
         BaseSmoothedComponentMassDistribution.__init__(self, mmin, mmax, normalization_shape)
     
     def spin_model(self, dataset, alpha_chi, beta_chi, sigma_spin):
@@ -253,12 +280,12 @@ class MassBothSpinCopulaBase(MassSingleSpinCopulaBase):
         v2 = betainc(alpha_chi, beta_chi, dataset["a_2"])
         return v1, v2
 
-    def copula(self, dataset, kappa1, kappa2, alpha_chi, beta_chi, sigma_spin):
+    def copula(self, dataset, kappa_b1, kappa_b2, alpha_chi, beta_chi, sigma_spin):
         u1 = xp.interp(dataset["mass_1"], self.ms, self.u1)
         u2 = xp.interp(dataset["mass_2"], self.ms, self.u2)
         v1, v2 = self.get_v(dataset, alpha_chi, beta_chi)
-        copula1 = frank_copula(u1, v1, kappa1)
-        copula2 = frank_copula(u2, v2, kappa2)
+        copula1 = frank_copula(u1, v1, kappa_b1)
+        copula2 = frank_copula(u2, v2, kappa_b2)
         return copula1 * copula2
 
 
@@ -267,6 +294,17 @@ class MassBothSpinCopulaSPSMD(MassBothSpinCopulaBase):
     """
 
     mass_model = two_component_single
+
+    @property
+    def kwargs(self):
+        return dict(gaussian_mass_maximum=self.mmax)
+    
+
+class MassBothSpinCopulaMPSMD(MassBothSpinCopulaBase):
+    """
+    """
+
+    mass_model = three_component_single
 
     @property
     def kwargs(self):

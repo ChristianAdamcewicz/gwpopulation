@@ -122,34 +122,6 @@ def independent_spin_magnitude_beta(
     return prior
 
 
-def iid_spin_orientation_gaussian_isotropic(dataset, xi_spin, sigma_spin):
-    r"""A mixture model of spin orientations with isotropic and normally
-    distributed components. The distribution of primary and secondary spin
-    orientations are expected to be identical and independent.
-
-    https://arxiv.org/abs/1704.08370 Eq. (4)
-
-    .. math::
-        p(z_1, z_2 | \xi, \sigma) =
-        \frac{(1 - \xi)^2}{4}
-        + \xi \prod_{i\in\{1, 2\}} \mathcal{N}(z_i; \mu=1, \sigma=\sigma, z_\min=-1, z_\max=1)
-
-    Where :math:`\mathcal{N}` is the truncated normal distribution.
-
-    Parameters
-    ----------
-    dataset: dict
-        Dictionary of numpy arrays for 'cos_tilt_1' and 'cos_tilt_2'.
-    xi_spin: float
-        Fraction of black holes in preferentially aligned component (:math:`\xi`).
-    sigma_spin: float
-        Width of preferentially aligned component.
-    """
-    return independent_spin_orientation_gaussian_isotropic(
-        dataset, xi_spin, sigma_spin, sigma_spin
-    )
-
-
 def inp_spin_orientation_gaussian_isotropic(dataset, sigma_1):
     r"""
     """
@@ -176,6 +148,34 @@ def iis_spin_orientation_gaussian_isotropic(dataset, sigma_spin):
     """
     prior = truncnorm(dataset["cos_tilt_2"], 1, sigma_spin, 1, -1)
     return prior
+
+
+def iid_spin_orientation_gaussian_isotropic(dataset, xi_spin, sigma_spin):
+    r"""A mixture model of spin orientations with isotropic and normally
+    distributed components. The distribution of primary and secondary spin
+    orientations are expected to be identical and independent.
+
+    https://arxiv.org/abs/1704.08370 Eq. (4)
+
+    .. math::
+        p(z_1, z_2 | \xi, \sigma) =
+        \frac{(1 - \xi)^2}{4}
+        + \xi \prod_{i\in\{1, 2\}} \mathcal{N}(z_i; \mu=1, \sigma=\sigma, z_\min=-1, z_\max=1)
+
+    Where :math:`\mathcal{N}` is the truncated normal distribution.
+
+    Parameters
+    ----------
+    dataset: dict
+        Dictionary of numpy arrays for 'cos_tilt_1' and 'cos_tilt_2'.
+    xi_spin: float
+        Fraction of black holes in preferentially aligned component (:math:`\xi`).
+    sigma_spin: float
+        Width of preferentially aligned component.
+    """
+    return independent_spin_orientation_gaussian_isotropic(
+        dataset, xi_spin, sigma_spin, sigma_spin
+    )
 
 
 def independent_spin_orientation_gaussian_isotropic(dataset, xi_spin, sigma_1, sigma_2):
@@ -207,6 +207,23 @@ def independent_spin_orientation_gaussian_isotropic(dataset, xi_spin, sigma_1, s
     prior = (1 - xi_spin) / 4 + xi_spin * truncnorm(
         dataset["cos_tilt_1"], 1, sigma_1, 1, -1
     ) * truncnorm(dataset["cos_tilt_2"], 1, sigma_2, 1, -1)
+    return prior
+
+
+def iid_spin_orientation_gaussian_isotropic_zmin(dataset, xi_spin, sigma_spin, zmin):
+    r"""
+    """
+    return independent_spin_orientation_gaussian_isotropic_zmin(
+        dataset, xi_spin, sigma_spin, sigma_spin, zmin, zmin
+    )
+
+
+def independent_spin_orientation_gaussian_isotropic_zmin(dataset, xi_spin, sigma_1, sigma_2, zmin_1, zmin_2):
+    r"""
+    """
+    prior = (1 - xi_spin) / ((1 - zmin_1) * (1 - zmin_2)) + xi_spin * truncnorm(
+        dataset["cos_tilt_1"], 1, sigma_1, 1, zmin_1
+    ) * truncnorm(dataset["cos_tilt_2"], 1, sigma_2, 1, zmin_2)
     return prior
 
 
