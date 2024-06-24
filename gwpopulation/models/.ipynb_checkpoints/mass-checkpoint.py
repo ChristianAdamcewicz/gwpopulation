@@ -6,7 +6,7 @@ from warnings import warn
 import inspect
 
 from ..cupy_utils import trapz, xp
-from ..utils import powerlaw, truncnorm, notchfilter
+from ..utils import powerlaw, truncnorm
 
 
 def matter_matters(mass, A, NSmin, NSmax, BHmin, BHmax, 
@@ -1116,8 +1116,8 @@ class SinglePeakSmoothedNonidenticalPairingMassDistribution(_SmoothedMassDistrib
         kwargs["mmax2"]=kwargs["mmax1"]
         kwargs["mmin2"]=kwargs["mmin1"]
         kwargs["delta_m2"]=kwargs["delta_m1"]
-#        kwargs["mpp2"]=kwargs["mpp1"]
-#        kwargs["sigpp2"]=kwargs["sigpp1"]
+        kwargs["mpp2"]=kwargs["mpp1"]
+        kwargs["sigpp2"]=kwargs["sigpp1"]
         
         return self.p_m1_m2(**kwargs)
 
@@ -1171,210 +1171,6 @@ class SinglePeakSmoothedPairingMassDistribution(_SmoothedMassDistribution,
         kwargs = locals()
         kwargs.pop('self')
         return self.p_m1_m2(**kwargs)
-
-
-class TwoPeakSmoothedPairingMassDistribution(_SmoothedMassDistribution,
-                                             _IdenticalPairingMassDistribution):
-    def __init__(self,mmin=2.0, mmax=100.):
-        _IdenticalPairingMassDistribution.__init__(self,mmin=mmin,mmax=mmax)
-        _SmoothedMassDistribution.__init__(self)
-
-    def pairing(self, dataset, beta_q):
-        mass_ratio = dataset["mass_2"]/dataset["mass_1"]
-        return powerlaw(mass_ratio, beta_q, 1, self.qmin)
-    
-    def p_m(self, mass, alpha, mmin, mmax, lam, lam_1, mpp_1, sigpp_1, mpp_2, sigpp_2, delta_m):
-        p_m = three_component_single(
-            mass,
-            alpha=alpha,
-            mmin=mmin,
-            mmax=mmax,
-            lam=lam,
-            lam_1=lam_1,
-            mpp_1=mpp_1,
-            sigpp_1=sigpp_1,
-            mpp_2=mpp_2,
-            sigpp_2=sigpp_2
-        )
-        p_m *= self.smoothing(mass, mmin=mmin, mmax=mmax, delta_m=delta_m)
-        norm = self.norm_p_m1(
-            alpha=alpha,
-            mmin=mmin,
-            mmax=mmax,
-            lam=lam,
-            lam_1=lam_1,
-            mpp_1=mpp_1,
-            sigpp_1=sigpp_1,
-            mpp_2=mpp_2,
-            sigpp_2=sigpp_2,
-            delta_m=delta_m
-        )
-        return p_m / norm
-
-    def norm_p_m1(self, alpha, mmin, mmax, lam, lam_1, mpp_1, sigpp_1, mpp_2, sigpp_2, delta_m):
-        """Calculate the normalisation factor for the primary mass"""
-        if delta_m == 0.0:
-            return 1
-        p_m = three_component_single(
-            self.m1s,
-            alpha=alpha,
-            mmin=mmin,
-            mmax=mmax,
-            lam=lam,
-            lam_1=lam_1,
-            mpp_1=mpp_1,
-            sigpp_1=sigpp_1,
-            mpp_2=mpp_2,
-            sigpp_2=sigpp_2
-        )
-        p_m *= self.smoothing(self.m1s, mmin=mmin, mmax=mmax, delta_m=delta_m)
-
-        norm = trapz(p_m, self.m1s)
-        return norm
-
-    def __call__(self, dataset, alpha, mmin, mmax, lam, lam_1, mpp_1, sigpp_1, mpp_2, sigpp_2, delta_m, beta_q):
-        # get arguments in a dict
-        kwargs = locals()
-        kwargs.pop('self')
-        return self.p_m1_m2(**kwargs)
-
-
-class TwoPeakSmoothedPairingMassDistributionNorm(TwoPeakSmoothedPairingMassDistribution):
-    def __init__(self,mmin=2.0, mmax=100.):
-        super(TwoPeakSmoothedPairingMassDistributionNorm, self).__init__(mmin=2.0, mmax=100.)
-        self.m1_g, self.m2_g = xp.meshgrid(self.m1s, self.m1s)
-
-    def full_norm(self, dataset, alpha, mmin, mmax, lam, lam_1, mpp_1, sigpp_1, mpp_2, sigpp_2, delta_m, beta_q):
-        p_m1 = self.p_m(self.m1_g, alpha, mmin, mmax, lam, lam_1, mpp_1, sigpp_1, mpp_2, sigpp_2, delta_m)
-        p_m2 = self.p_m(self.m2_g, alpha, mmin, mmax, lam, lam_1, mpp_1, sigpp_1, mpp_2, sigpp_2, delta_m)
-        pairing = powerlaw(self.m2_g/self.m1_g, beta_q, 1, self.qmin)
-        prob = p_m1 * p_m2 * pairing
-        prob *= (self.m1_g >= self.m2_g)
-        norm = trapz(prob, self.m1s)
-        norm = trapz(norm, self.m1s)
-        return norm
-
-    def __call__(self, dataset, alpha, mmin, mmax, lam, lam_1, mpp_1, sigpp_1, mpp_2, sigpp_2, delta_m, beta_q):
-        # get arguments in a dict
-        kwargs = locals()
-        kwargs.pop('self')
-        return self.p_m1_m2(**kwargs) / self.full_norm(**kwargs)
-
-
-class TwoPeakGapSmoothedPairingMassDistribution(_SmoothedMassDistribution,
-                                                _IdenticalPairingMassDistribution):
-    def __init__(self,mmin=2.0, mmax=100.):
-        _IdenticalPairingMassDistribution.__init__(self,mmin=mmin,mmax=mmax)
-        _SmoothedMassDistribution.__init__(self)
-
-    def pairing(self, dataset, beta_q):
-        mass_ratio = dataset["mass_2"]/dataset["mass_1"]
-        return powerlaw(mass_ratio, beta_q, 1, self.qmin)
-    
-    def p_m(self, mass, alpha, mmin, mmax, lam, lam_1, mpp_1, sigpp_1, mpp_2, sigpp_2, delta_m,
-            depth, gamma_l, gamma_h, eta_l, eta_h):
-        p_m = three_component_single(
-            mass,
-            alpha=alpha,
-            mmin=mmin,
-            mmax=mmax,
-            lam=lam,
-            lam_1=lam_1,
-            mpp_1=mpp_1,
-            sigpp_1=sigpp_1,
-            mpp_2=mpp_2,
-            sigpp_2=sigpp_2
-        )
-        p_m *= notchfilter(
-            mass,
-            depth=depth,
-            gamma_l=gamma_l,
-            gamma_h=gamma_h,
-            eta_l=eta_l,
-            eta_h=eta_h
-        )
-        p_m *= self.smoothing(mass, mmin=mmin, mmax=mmax, delta_m=delta_m)
-        norm = self.norm_p_m1(
-            alpha=alpha,
-            mmin=mmin,
-            mmax=mmax,
-            lam=lam,
-            lam_1=lam_1,
-            mpp_1=mpp_1,
-            sigpp_1=sigpp_1,
-            mpp_2=mpp_2,
-            sigpp_2=sigpp_2,
-            delta_m=delta_m,
-            depth=depth,
-            gamma_l=gamma_l,
-            gamma_h=gamma_h,
-            eta_l=eta_l,
-            eta_h=eta_h
-        )
-        return p_m / norm
-
-    def norm_p_m1(self, alpha, mmin, mmax, lam, lam_1, mpp_1, sigpp_1, mpp_2, sigpp_2, delta_m,
-                  depth, gamma_l, gamma_h, eta_l, eta_h):
-        """Calculate the normalisation factor for the primary mass"""
-        p_m = three_component_single(
-            self.m1s,
-            alpha=alpha,
-            mmin=mmin,
-            mmax=mmax,
-            lam=lam,
-            lam_1=lam_1,
-            mpp_1=mpp_1,
-            sigpp_1=sigpp_1,
-            mpp_2=mpp_2,
-            sigpp_2=sigpp_2
-        )
-        p_m *= notchfilter(
-            self.m1s,
-            depth=depth,
-            gamma_l=gamma_l,
-            gamma_h=gamma_h,
-            eta_l=eta_l,
-            eta_h=eta_h
-        )
-        if delta_m > 0:
-            p_m *= self.smoothing(self.m1s, mmin=mmin, mmax=mmax, delta_m=delta_m)
-
-        norm = trapz(p_m, self.m1s)
-        return norm
-
-    def __call__(self, dataset, alpha, mmin, mmax, lam, lam_1, mpp_1, sigpp_1, mpp_2, sigpp_2, delta_m,
-                 depth, gamma_l, gamma_h, eta_l, eta_h, beta_q):
-        # get arguments in a dict
-        kwargs = locals()
-        kwargs.pop('self')
-        return self.p_m1_m2(**kwargs)
-
-
-class TwoPeakGapSmoothedPairingMassDistributionNorm(TwoPeakGapSmoothedPairingMassDistribution):
-    def __init__(self,mmin=2.0, mmax=100.):
-        super(TwoPeakGapSmoothedPairingMassDistributionNorm, self).__init__(mmin=2.0, mmax=100.)
-        self.m1_g, self.m2_g = xp.meshgrid(self.m1s, self.m1s)
-
-    def full_norm(self, dataset, alpha, mmin, mmax, lam, lam_1, mpp_1, sigpp_1, mpp_2, sigpp_2, delta_m,
-                 depth, gamma_l, gamma_h, eta_l, eta_h, beta_q):
-        p_m1 = self.p_m(self.m1_g, alpha, mmin, mmax, lam, lam_1, mpp_1, sigpp_1, mpp_2, sigpp_2, delta_m,
-            depth, gamma_l, gamma_h, eta_l, eta_h)
-        p_m2 = self.p_m(self.m2_g, alpha, mmin, mmax, lam, lam_1, mpp_1, sigpp_1, mpp_2, sigpp_2, delta_m,
-            depth, gamma_l, gamma_h, eta_l, eta_h)
-        pairing = powerlaw(self.m2_g/self.m1_g, beta_q, 1, self.qmin)
-        prob = p_m1 * p_m2 * pairing
-        prob *= (self.m1_g >= self.m2_g)
-        norm = trapz(prob, self.m1s)
-        norm = trapz(norm, self.m1s)
-        return norm
-
-    def __call__(self, dataset, alpha, mmin, mmax, lam, lam_1, mpp_1, sigpp_1, mpp_2, sigpp_2, delta_m,
-                 depth, gamma_l, gamma_h, eta_l, eta_h, beta_q):
-        # get arguments in a dict
-        kwargs = locals()
-        kwargs.pop('self')
-        return self.p_m1_m2(**kwargs) / self.full_norm(**kwargs)
-
 
 class SinglePeakSmoothedMassDistribution(_SmoothedMassDistribution):
     def __call__(self, dataset, alpha, beta, mmin, mmax, lam, mpp, sigpp, delta_m):

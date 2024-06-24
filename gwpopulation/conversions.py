@@ -4,7 +4,7 @@ Parameter conversions
 
 
 def convert_to_beta_parameters(parameters, remove=True):
-    """
+    """ 
     Convert to parameters for standard beta distribution.
 
     Calls gwpopulation.conversions.mu_var_max_to_alpha_beta_max
@@ -62,7 +62,15 @@ def convert_to_beta_parameters(parameters, remove=True):
     if not done:
         _ = _convert("")
 
-    return converted, added_keys
+    if "depth" in parameters.keys():
+        converted["gap_lim"] = parameters["gamma_h"] - parameters["gamma_l"]
+        converted["low_gap_lim"] = parameters["gamma_l"] - parameters["mpp_1"]
+        converted["high_gap_lim"] = parameters["mpp_2"] - parameters["gamma_h"]
+        added_keys.append("gap_lim")
+        added_keys.append("low_gap_lim")
+        added_keys.append("high_gap_lim")
+
+    return converted, added_keys 
 
 
 def alpha_beta_max_to_mu_var_max(alpha, beta, amax):
@@ -129,3 +137,17 @@ def mu_var_max_to_alpha_beta_max(mu, var, amax):
     alpha = (mu ** 2 * (1 - mu) - mu * var) / var
     beta = (mu * (1 - mu) ** 2 - (1 - mu) * var) / var
     return alpha, beta, amax
+
+def equal(parameters,fix_to_name,new_name=None,remove=True):
+    added_keys = list()
+    converted = parameters.copy()
+    # naming logistics
+    if new_name is None:
+        new_name = fix_to_name[:-1]+"2"
+    if remove:
+        added_keys.append(new_name)
+    
+    # fix the new paramter to the old parameter
+    converted[new_name]=parameters[fix_to_name]
+
+    return dict(peak=parameters['fix_to_name'])

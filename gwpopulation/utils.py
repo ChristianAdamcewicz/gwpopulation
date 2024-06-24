@@ -126,6 +126,17 @@ def truncnorm(xx, mu, sigma, high, low):
     return prob
 
 
+def notchfilter(xx, depth, gamma_l, gamma_h, eta_l, eta_h):
+    if gamma_l > gamma_h:
+        raise ValueError(f"gamma_l must be less than gamma_h, gamma_l={gamma_l}, gamma_h={gamma_h}")
+    if (depth == 0) or (gamma_l == gamma_h):
+        return 1.
+    lower = 1. / (1. + (gamma_l / xx) ** eta_l)
+    upper = 1. / (1. + (xx / gamma_h) ** eta_h)
+    notch = 1. - depth * lower * upper
+    return notch
+
+
 def unnormalized_2d_gaussian(xx, yy, mu_x, mu_y, sigma_x, sigma_y, covariance):
     determinant = sigma_x ** 2 * sigma_y ** 2 * (1 - covariance)
     residual_x = (mu_x - xx) * sigma_x

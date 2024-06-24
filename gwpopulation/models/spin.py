@@ -6,6 +6,13 @@ from ..cupy_utils import xp
 from ..utils import beta_dist, truncnorm, unnormalized_2d_gaussian
 
 
+def non_spin_magnitude(dataset):
+    return 1.
+
+def non_spin_orientation(dataset):
+    return 1.
+
+
 def iid_spin(dataset, xi_spin, sigma_spin, amax, alpha_chi, beta_chi):
     r"""
     Independently and identically distributed spins.

@@ -108,7 +108,7 @@ class ResamplingVT(_BaseVT):
         weights = self.model.prob(self.data) / self.data["prior"]
         mu = float(xp.sum(weights) / self.total_injections)
         var = float(
-            xp.sum(weights ** 2) / self.total_injections ** 2
+            xp.exp(xp.log(xp.sum(weights ** 2)) - 2*np.log(self.total_injections))
             - mu ** 2 / self.total_injections
         )
         return mu, var
