@@ -52,4 +52,4 @@ We provide a number of pre-defined models along with standard base models that
 can be extended. See the API documentation for more details on implemented models.
 """
 
-from . import mass, redshift, spin
+from . import mass, redshift, spin, multivariate

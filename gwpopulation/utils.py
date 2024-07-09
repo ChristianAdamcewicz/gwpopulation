@@ -11,6 +11,10 @@ from scipy import special as scs
 xp = np
 
 
+def dummy_model(dataset):
+    return 1.
+
+
 def apply_conditions(conditions):
     """
     A decorator to apply conditions to inputs of a function.
@@ -168,6 +172,42 @@ def truncnorm(xx, mu, sigma, high, low):
     prob *= norm
     prob *= (xx <= high) & (xx >= low)
     return prob
+
+
+@apply_conditions(dict(omega=(gt, 0)))
+def truncskewnorm(xx, xi, omega, high, low, skew):
+    r"""
+    Unnormalised!
+    """
+    prob = xp.exp(-xp.power(xx - xi, 2) / (2 * omega ** 2))
+    prob *= (1 + scs.erf(skew * (xx - xi) / (xp.sqrt(2) * omega)))
+    prob *= (xx <= high) & (xx >= low)
+    return prob
+
+
+def frank_copula(u, v, kappa):
+    """
+    Frank copula density function.
+    
+    Parameters
+    ----------
+    u: float, array-like
+        CDF of first parameter.
+    v: float, array-like
+        CDF of second parameter.
+    kappa: float
+        Level of correlation.
+
+    Returns
+    -------
+    prob: float, array-like
+        The distribution evaluated at (u,v).
+    """
+    exp_kappa = xp.exp(kappa)
+    exp_kappa_u_v = exp_kappa**(u + v)
+    prob = (kappa * exp_kappa_u_v * (exp_kappa - 1) /
+            (exp_kappa - exp_kappa**u - exp_kappa**v + exp_kappa_u_v)**2)
+    return prob*(kappa != 0) + 1*(kappa == 0)
 
 
 def unnormalized_2d_gaussian(xx, yy, mu_x, mu_y, sigma_x, sigma_y, covariance):

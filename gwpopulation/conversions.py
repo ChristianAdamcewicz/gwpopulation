@@ -2,6 +2,9 @@
 Parameter conversions
 """
 
+import numpy as np
+xp = np
+
 
 def convert_to_beta_parameters(parameters, remove=True):
     """
@@ -26,11 +29,11 @@ def convert_to_beta_parameters(parameters, remove=True):
     added_keys = list()
     converted = parameters.copy()
 
-    def _convert(suffix):
-        alpha = f"alpha_chi{suffix}"
-        beta = f"beta_chi{suffix}"
-        mu = f"mu_chi{suffix}"
-        sigma = f"sigma_chi{suffix}"
+    def _convert(suffix, param):
+        alpha = f"alpha_{param}{suffix}"
+        beta = f"beta_{param}{suffix}"
+        mu = f"mu_{param}{suffix}"
+        sigma = f"sigma_{param}{suffix}"
         amax = f"amax{suffix}"
 
         if alpha not in parameters.keys() or beta not in parameters.keys():
@@ -54,14 +57,29 @@ def convert_to_beta_parameters(parameters, remove=True):
                 done = False
         return done
 
-    done = False
+    for param in ["chi", "rho"]:
+        done = False
+        for suffix in ["_1", "_2"]:
+            _done = _convert(suffix, param)
+            done = done or _done
+        if not done:
+            _ = _convert("", param)
 
-    for suffix in ["_1", "_2"]:
-        _done = _convert(suffix)
-        done = done or _done
-    if not done:
-        _ = _convert("")
+    return converted, added_keys
 
+
+def convert_to_effective_parameters(parameters, remove=True):
+    converted, added_keys = convert_to_beta_parameters(parameters, remove)
+
+    for param in ['eff', 'diff']:
+        converted[f'xi_{param}'], converted[f'omega_{param}'], converted[f'skew_{param}'] = (
+            mu_var_gamma_to_xi_omega_skew(
+                parameters[f'mu_{param}'], parameters[f'sigma_{param}'], parameters[f'gamma_{param}']))
+        if remove:
+            added_keys.append(f'xi_{param}')
+            added_keys.append(f'omega_{param}')
+            added_keys.append(f'skew_{param}')
+    
     return converted, added_keys
 
 
@@ -129,3 +147,34 @@ def mu_var_max_to_alpha_beta_max(mu, var, amax):
     alpha = (mu**2 * (1 - mu) - mu * var) / var
     beta = (mu * (1 - mu) ** 2 - (1 - mu) * var) / var
     return alpha, beta, amax
+
+
+def mu_var_gamma_to_xi_omega_skew(mu, var, gamma):
+    """
+    Convert between parameters for skew norm distribution
+    
+    Parameters
+    ==========
+    mu : float
+        The mean
+    var : float
+        The variance
+    gamma : float
+        The skewness
+        
+    Returns
+    =======
+    xi : float
+        Shape parameter
+    omega : float
+        Shape parameter
+    skew : float
+        Shape parameter
+    """
+    delta = xp.sqrt(xp.pi/(2 * (
+        1 + ((4 - xp.pi) / (2*xp.abs(gamma)))**(2/3))))
+    delta *= xp.sign(gamma)
+    skew = delta / xp.sqrt(1 - delta**2)
+    omega = xp.sqrt(var / (1 - 2*delta**2/xp.pi))
+    xi = mu - omega*delta*xp.sqrt(2/xp.pi)
+    return xi, omega, skew

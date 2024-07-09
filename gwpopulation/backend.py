@@ -71,11 +71,12 @@ def modules_to_update():
         from importlib.metadata import entry_points
     all_with_xp = [module.value for module in entry_points(group="gwpopulation.xp")]
     all_with_scs = [module.value for module in entry_points(group="gwpopulation.scs")]
+    all_with_sci = [module.value for module in entry_points(group="gwpopulation.sci")]
     other_entries = [
         module.value.split(":") for module in entry_points(group="gwpopulation.other")
     ]
     others = {key: value for key, value in other_entries}
-    return all_with_xp, all_with_scs, others
+    return all_with_xp, all_with_scs, all_with_sci, others
 
 
 def disable_cupy():
@@ -112,7 +113,7 @@ def enable_cupy():
     set_backend(backend="cupy")
 
 
-def _configure_jax(xp):
+def _configure_jax(xp, sci):
     """
     Configuration requirements for :code:`jax`
 
@@ -121,24 +122,51 @@ def _configure_jax(xp):
     """
     from jax import config
     from jax.scipy.integrate import trapezoid
-
+    
+    def _tupleset(t, i, value):
+        l = list(t)
+        l[i] = value
+        return tuple(l)
+    def _cumtrapz(y, x=None, axis=-1, initial=0):
+        """
+        Adapted from https://github.com/scipy/scipy/blob/v0.14.0/scipy/integrate/quadrature.py#L193
+        """
+        y = xp.asarray(y)
+        x = xp.asarray(x)
+        d = xp.diff(x)
+        # reshape to correct shape
+        shape = [1] * y.ndim
+        shape[axis] = -1
+        d = d.reshape(shape)
+        nd = len(y.shape)
+        slice1 = _tupleset((slice(None),)*nd, axis, slice(1, None))
+        slice2 = _tupleset((slice(None),)*nd, axis, slice(None, -1))
+        res = xp.cumsum(d * (y[slice1] + y[slice2]) / 2.0, axis=axis)
+        shape = list(res.shape)
+        shape[axis] = 1
+        res = xp.concatenate([xp.ones(shape, dtype=res.dtype) * initial, res],
+                            axis=axis)
+        return res
+        
     config.update("jax_enable_x64", True)
     xp.trapz = trapezoid
+    sci.cumtrapz = _cumtrapz
 
 
 def _load_numpy_and_scipy(backend):
     try:
         xp = import_module(_np_module[backend])
         scs = import_module(_scipy_module[backend]).special
+        sci = import_module(_scipy_module[backend]).integrate
     except ModuleNotFoundError:
         raise ModuleNotFoundError(f"{backend} not installed for gwpopulation")
     except ImportError:
         raise ImportError(f"{backend} installed but not importable for gwpopulation")
 
     if backend == "jax":
-        _configure_jax(xp)
+        _configure_jax(xp, sci)
 
-    return xp, scs
+    return xp, scs, sci
 
 
 def _load_arbitrary(func, backend):
@@ -179,14 +207,16 @@ def set_backend(backend="numpy"):
     elif backend == __backend__:
         return
 
-    xp, scs = _load_numpy_and_scipy(backend)
+    xp, scs, sci = _load_numpy_and_scipy(backend)
 
     __backend__ = backend
-    all_with_xp, all_with_scs, others = modules_to_update()
+    all_with_xp, all_with_scs, all_with_sci, others = modules_to_update()
     for module in all_with_xp:
         setattr(import_module(module), "xp", xp)
     for module in all_with_scs:
         setattr(import_module(module), "scs", scs)
+    for module in all_with_sci:
+        setattr(import_module(module), "sci", sci)
     for module, func in others.items():
         setattr(
             import_module(module),
