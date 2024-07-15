@@ -12,10 +12,10 @@ from .models.redshift import _Redshift, total_four_volume
 class _BaseVT(object):
     def __init__(self, model, data):
         self.data = data
-        if isinstance(model, list):
-            model = Model(model)
-        elif not isinstance(model, Model):
-            model = Model([model])
+        # if isinstance(model, list):
+        #     model = Model(model)
+        # elif not isinstance(model, Model):
+        #     model = Model([model])
         self.model = model
 
     def __call__(self, *args, **kwargs):
@@ -90,7 +90,7 @@ class ResamplingVT(_BaseVT):
         self.redshift_model = None
         self.marginalize_uncertainty = marginalize_uncertainty
         self.enforce_convergence = enforce_convergence
-        for _model in self.model.models:
+        for _model in self.model['hyper_prior'].models:
             if isinstance(_model, _Redshift):
                 self.redshift_model = _model
         if self.redshift_model is None:
@@ -160,8 +160,459 @@ class ResamplingVT(_BaseVT):
         return vt_factor
 
     def detection_efficiency(self, parameters):
-        self.model.parameters.update(parameters)
-        weights = self.model.prob(self.data) / self.data["prior"]
+        self.model['hyper_prior'].parameters.update(parameters)
+        weights = self.model['hyper_prior'].prob(self.data) / self.data["prior"]
+        mu = float(xp.sum(weights) / self.total_injections)
+        var = float(
+            xp.sum(weights**2) / self.total_injections**2
+            - mu**2 / self.total_injections
+        )
+        return mu, var
+
+    def surveyed_hypervolume(self, parameters):
+        r"""
+        The total surveyed 4-volume with units of :math:`Gpc^3yr`.
+
+        .. math::
+            \mathcal{V} = \int dz \frac{dV_c}{dz} \frac{\psi(z)}{1 + z}
+
+        If no redshift model is specified, assume :math:`\psi(z)=1`.
+
+        Parameters
+        ----------
+        parameters: dict
+            Dictionary of parameters to compute the volume at
+
+        Returns
+        -------
+        float: The volume
+
+        """
+        if self.redshift_model is None:
+            return self._surveyed_hypervolume
+        else:
+            return (
+                self.redshift_model.normalisation(parameters) / 1e9 * self.analysis_time
+            )
+        
+class TwoResamplingVT(_BaseVT):
+    """
+    Evaluate the sensitive volume using a set of found injections.
+
+    See https://arxiv.org/abs/1904.10879 for details of the formalism.
+
+    Parameters
+    ----------
+    model: callable
+        Population model
+    data: dict
+        The found injections and relevant meta data
+    n_events: int
+        The number of events observed
+    marginalize_uncertainty: bool (Default: False)
+        Whether to return the uncertainty-marginalized pdet from Eq 11
+        in https://arxiv.org/abs/1904.10879. Recommend not to use this
+        as it is not completely understood if this uncertainty
+        marginalization is correct.
+    enforce_convergence: bool (Default: True)
+        Whether to enforce the condition that n_effective > 4*n_obs.
+        This flag only acts when marignalize_uncertainty is False.
+    """
+
+    def __init__(
+        self,
+        model,
+        data,
+        n_events=np.inf,
+        marginalize_uncertainty=False,
+        enforce_convergence=False, # turn this back on
+    ):
+        super(TwoResamplingVT, self).__init__(model=model, data=data)
+        self.n_events = n_events
+        self.total_injections = data.get("total_generated", len(data["prior"]))
+        self.analysis_time = data.get("analysis_time", 1)
+        self.redshift_model = None
+        self.marginalize_uncertainty = marginalize_uncertainty
+        self.enforce_convergence = enforce_convergence
+        for _model in self.model['hyper_prior'].models:
+            if isinstance(_model, _Redshift):
+                self.redshift_model = _model
+        if self.redshift_model is None:
+            self._surveyed_hypervolume = total_four_volume(
+                lamb=0, analysis_time=self.analysis_time
+            )
+
+    def __call__(self, parameters):
+        """
+        Compute the expected number of detections given a set of injections.
+
+        Option to use the uncertainty-marginalized vt_factor from Equation 11
+        in https://arxiv.org/abs/1904.10879 by setting `marginalize_uncertainty`
+        to True, or use the estimator from Equation 8 (default behavior).
+
+        Recommend not enabling marginalize_uncertainty and setting convergence
+        criteria based on uncertainty in total likelihood in HyperparameterLikelihood.
+
+        If using `marginalize_uncertainty` and n_effective < 4 * n_events we
+        return np.inf so that the sample is rejected. This condition is also
+        enforced if `enforce_convergence` is True.
+
+        Returns either vt_factor or mu and var.
+
+        Parameters
+        ----------
+        parameters: dict
+            The population parameters
+        """
+        if not self.marginalize_uncertainty:
+            mu, var = self.detection_efficiency(parameters)
+            if self.enforce_convergence:
+                converged = self.check_convergence(mu, var)
+                if not converged:
+                    return xp.inf, var
+            return mu, var
+        else:
+            vt_factor = self.vt_factor(parameters)
+            return vt_factor
+
+    def check_convergence(self, mu, var):
+        if mu**2 <= 4 * self.n_events * var:
+            return False
+        else:
+            return True
+
+    def vt_factor(self, parameters):
+        """
+        Compute the expected number of detections given a set of injections.
+
+        This should be implemented as in https://arxiv.org/abs/1904.10879
+
+        If n_effective < 4 * n_events we return np.inf so that the sample
+        is rejected.
+
+        Parameters
+        ----------
+        parameters: dict
+            The population parameters
+        """
+        mu, var = self.detection_efficiency(parameters)
+        converged = self.check_convergence(mu, var)
+        if not converged:
+            return xp.inf
+        n_effective = mu**2 / var
+        vt_factor = mu / np.exp((3 + self.n_events) / 2 / n_effective)
+        return vt_factor
+
+    def detection_efficiency(self, parameters):
+        self.model['hyper_prior'].parameters.update(parameters)
+        self.model['hyper_prior2'].parameters.update(parameters)
+        weights1 = self.model['hyper_prior'].prob(self.data) / self.data["prior"]
+        weights2 = self.model['hyper_prior2'].prob(self.data) / self.data["prior"]
+        weights = parameters["likelihood_mix"]*weights1 + (1-parameters["likelihood_mix"])*weights2
+        mu = float(xp.sum(weights) / self.total_injections)
+        var = float(
+            xp.sum(weights**2) / self.total_injections**2
+            - mu**2 / self.total_injections
+        )
+        return mu, var
+
+    def surveyed_hypervolume(self, parameters):
+        r"""
+        The total surveyed 4-volume with units of :math:`Gpc^3yr`.
+
+        .. math::
+            \mathcal{V} = \int dz \frac{dV_c}{dz} \frac{\psi(z)}{1 + z}
+
+        If no redshift model is specified, assume :math:`\psi(z)=1`.
+
+        Parameters
+        ----------
+        parameters: dict
+            Dictionary of parameters to compute the volume at
+
+        Returns
+        -------
+        float: The volume
+
+        """
+        if self.redshift_model is None:
+            return self._surveyed_hypervolume
+        else:
+            return (
+                self.redshift_model.normalisation(parameters) / 1e9 * self.analysis_time
+            )
+
+class ThreeResamplingVT(_BaseVT):
+    """
+    Evaluate the sensitive volume using a set of found injections.
+
+    See https://arxiv.org/abs/1904.10879 for details of the formalism.
+
+    Parameters
+    ----------
+    model: callable
+        Population model
+    data: dict
+        The found injections and relevant meta data
+    n_events: int
+        The number of events observed
+    marginalize_uncertainty: bool (Default: False)
+        Whether to return the uncertainty-marginalized pdet from Eq 11
+        in https://arxiv.org/abs/1904.10879. Recommend not to use this
+        as it is not completely understood if this uncertainty
+        marginalization is correct.
+    enforce_convergence: bool (Default: True)
+        Whether to enforce the condition that n_effective > 4*n_obs.
+        This flag only acts when marignalize_uncertainty is False.
+    """
+
+    def __init__(
+        self,
+        model,
+        data,
+        n_events=np.inf,
+        marginalize_uncertainty=False,
+        enforce_convergence=False, # turn this back on
+    ):
+        super(ThreeResamplingVT, self).__init__(model=model, data=data)
+        self.n_events = n_events
+        self.total_injections = data.get("total_generated", len(data["prior"]))
+        self.analysis_time = data.get("analysis_time", 1)
+        self.redshift_model = None
+        self.marginalize_uncertainty = marginalize_uncertainty
+        self.enforce_convergence = enforce_convergence
+        for _model in self.model['hyper_prior'].models:
+            if isinstance(_model, _Redshift):
+                self.redshift_model = _model
+        if self.redshift_model is None:
+            self._surveyed_hypervolume = total_four_volume(
+                lamb=0, analysis_time=self.analysis_time
+            )
+
+    def __call__(self, parameters):
+        """
+        Compute the expected number of detections given a set of injections.
+
+        Option to use the uncertainty-marginalized vt_factor from Equation 11
+        in https://arxiv.org/abs/1904.10879 by setting `marginalize_uncertainty`
+        to True, or use the estimator from Equation 8 (default behavior).
+
+        Recommend not enabling marginalize_uncertainty and setting convergence
+        criteria based on uncertainty in total likelihood in HyperparameterLikelihood.
+
+        If using `marginalize_uncertainty` and n_effective < 4 * n_events we
+        return np.inf so that the sample is rejected. This condition is also
+        enforced if `enforce_convergence` is True.
+
+        Returns either vt_factor or mu and var.
+
+        Parameters
+        ----------
+        parameters: dict
+            The population parameters
+        """
+        if not self.marginalize_uncertainty:
+            mu, var = self.detection_efficiency(parameters)
+            if self.enforce_convergence:
+                converged = self.check_convergence(mu, var)
+                if not converged:
+                    return xp.inf, var
+            return mu, var
+        else:
+            vt_factor = self.vt_factor(parameters)
+            return vt_factor
+
+    def check_convergence(self, mu, var):
+        if mu**2 <= 4 * self.n_events * var:
+            return False
+        else:
+            return True
+
+    def vt_factor(self, parameters):
+        """
+        Compute the expected number of detections given a set of injections.
+
+        This should be implemented as in https://arxiv.org/abs/1904.10879
+
+        If n_effective < 4 * n_events we return np.inf so that the sample
+        is rejected.
+
+        Parameters
+        ----------
+        parameters: dict
+            The population parameters
+        """
+        mu, var = self.detection_efficiency(parameters)
+        converged = self.check_convergence(mu, var)
+        if not converged:
+            return xp.inf
+        n_effective = mu**2 / var
+        vt_factor = mu / np.exp((3 + self.n_events) / 2 / n_effective)
+        return vt_factor
+
+    def detection_efficiency(self, parameters):
+        self.model['hyper_prior'].parameters.update(parameters)
+        self.model['hyper_prior2'].parameters.update(parameters)
+        self.model['hyper_prior3'].parameters.update(parameters)
+        
+        weights1 = self.model['hyper_prior'].prob(self.data) / self.data["prior"]
+        weights2 = self.model['hyper_prior2'].prob(self.data) / self.data["prior"]
+        weights3 = self.model['hyper_prior3'].prob(self.data) / self.data["prior"]
+        
+        weights = parameters["likelihood_mix"]*weights1 + (1-parameters["likelihood_mix"])*parameters["likelihood_mix2"]*weights2 + (1-parameters["likelihood_mix"])*(1-parameters["likelihood_mix2"])*weights3
+        mu = float(xp.sum(weights) / self.total_injections)
+        var = float(
+            xp.sum(weights**2) / self.total_injections**2
+            - mu**2 / self.total_injections
+        )
+        return mu, var
+
+    def surveyed_hypervolume(self, parameters):
+        r"""
+        The total surveyed 4-volume with units of :math:`Gpc^3yr`.
+
+        .. math::
+            \mathcal{V} = \int dz \frac{dV_c}{dz} \frac{\psi(z)}{1 + z}
+
+        If no redshift model is specified, assume :math:`\psi(z)=1`.
+
+        Parameters
+        ----------
+        parameters: dict
+            Dictionary of parameters to compute the volume at
+
+        Returns
+        -------
+        float: The volume
+
+        """
+        if self.redshift_model is None:
+            return self._surveyed_hypervolume
+        else:
+            return (
+                self.redshift_model.normalisation(parameters) / 1e9 * self.analysis_time
+            )
+
+class FourResamplingVT(_BaseVT):
+    """
+    Evaluate the sensitive volume using a set of found injections.
+
+    See https://arxiv.org/abs/1904.10879 for details of the formalism.
+
+    Parameters
+    ----------
+    model: callable
+        Population model
+    data: dict
+        The found injections and relevant meta data
+    n_events: int
+        The number of events observed
+    marginalize_uncertainty: bool (Default: False)
+        Whether to return the uncertainty-marginalized pdet from Eq 11
+        in https://arxiv.org/abs/1904.10879. Recommend not to use this
+        as it is not completely understood if this uncertainty
+        marginalization is correct.
+    enforce_convergence: bool (Default: True)
+        Whether to enforce the condition that n_effective > 4*n_obs.
+        This flag only acts when marignalize_uncertainty is False.
+    """
+
+    def __init__(
+        self,
+        model,
+        data,
+        n_events=np.inf,
+        marginalize_uncertainty=False,
+        enforce_convergence=False, # turn this back on
+    ):
+        super(FourResamplingVT, self).__init__(model=model, data=data)
+        self.n_events = n_events
+        self.total_injections = data.get("total_generated", len(data["prior"]))
+        self.analysis_time = data.get("analysis_time", 1)
+        self.redshift_model = None
+        self.marginalize_uncertainty = marginalize_uncertainty
+        self.enforce_convergence = enforce_convergence
+        for _model in self.model['hyper_prior'].models:
+            if isinstance(_model, _Redshift):
+                self.redshift_model = _model
+        if self.redshift_model is None:
+            self._surveyed_hypervolume = total_four_volume(
+                lamb=0, analysis_time=self.analysis_time
+            )
+
+    def __call__(self, parameters):
+        """
+        Compute the expected number of detections given a set of injections.
+
+        Option to use the uncertainty-marginalized vt_factor from Equation 11
+        in https://arxiv.org/abs/1904.10879 by setting `marginalize_uncertainty`
+        to True, or use the estimator from Equation 8 (default behavior).
+
+        Recommend not enabling marginalize_uncertainty and setting convergence
+        criteria based on uncertainty in total likelihood in HyperparameterLikelihood.
+
+        If using `marginalize_uncertainty` and n_effective < 4 * n_events we
+        return np.inf so that the sample is rejected. This condition is also
+        enforced if `enforce_convergence` is True.
+
+        Returns either vt_factor or mu and var.
+
+        Parameters
+        ----------
+        parameters: dict
+            The population parameters
+        """
+        if not self.marginalize_uncertainty:
+            mu, var = self.detection_efficiency(parameters)
+            if self.enforce_convergence:
+                converged = self.check_convergence(mu, var)
+                if not converged:
+                    return xp.inf, var
+            return mu, var
+        else:
+            vt_factor = self.vt_factor(parameters)
+            return vt_factor
+
+    def check_convergence(self, mu, var):
+        if mu**2 <= 4 * self.n_events * var:
+            return False
+        else:
+            return True
+
+    def vt_factor(self, parameters):
+        """
+        Compute the expected number of detections given a set of injections.
+
+        This should be implemented as in https://arxiv.org/abs/1904.10879
+
+        If n_effective < 4 * n_events we return np.inf so that the sample
+        is rejected.
+
+        Parameters
+        ----------
+        parameters: dict
+            The population parameters
+        """
+        mu, var = self.detection_efficiency(parameters)
+        converged = self.check_convergence(mu, var)
+        if not converged:
+            return xp.inf
+        n_effective = mu**2 / var
+        vt_factor = mu / np.exp((3 + self.n_events) / 2 / n_effective)
+        return vt_factor
+
+    def detection_efficiency(self, parameters):
+        self.model['hyper_prior'].parameters.update(parameters)
+        self.model['hyper_prior2'].parameters.update(parameters)
+        self.model['hyper_prior3'].parameters.update(parameters)
+        self.model['hyper_prior4'].parameters.update(parameters)
+        
+        weights1 = self.model['hyper_prior'].prob(self.data) / self.data["prior"]
+        weights2 = self.model['hyper_prior2'].prob(self.data) / self.data["prior"]
+        weights3 = self.model['hyper_prior3'].prob(self.data) / self.data["prior"]
+        weights4 = self.model['hyper_prior4'].prob(self.data) / self.data["prior"]
+        
+        weights = parameters["likelihood_mix"]*weights1 + (1-parameters["likelihood_mix"])*parameters["likelihood_mix2"]*weights2 + (1-parameters["likelihood_mix"])*(1-parameters["likelihood_mix2"])*parameters["likelihood_mix3"]*weights3 + (1-parameters["likelihood_mix"])*(1-parameters["likelihood_mix2"])*(1-parameters["likelihood_mix3"])*weights4
         mu = float(xp.sum(weights) / self.total_injections)
         var = float(
             xp.sum(weights**2) / self.total_injections**2
