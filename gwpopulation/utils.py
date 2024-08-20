@@ -203,10 +203,9 @@ def frank_copula(u, v, kappa):
     prob: float, array-like
         The distribution evaluated at (u,v).
     """
-    exp_kappa = xp.exp(kappa)
-    exp_kappa_u_v = exp_kappa**(u + v)
-    prob = (kappa * exp_kappa_u_v * (exp_kappa - 1) /
-            (exp_kappa - exp_kappa**u - exp_kappa**v + exp_kappa_u_v)**2)
+    numerator = -kappa * xp.exp(-kappa*(u+v)) * (xp.exp(-kappa) - 1)
+    denominator = (xp.exp(-kappa) - xp.exp(-kappa*u) - xp.exp(-kappa*v) + xp.exp(-kappa*(u+v)))**2
+    prob = numerator / denominator
     return prob*(kappa != 0) + 1*(kappa == 0)
 
 
