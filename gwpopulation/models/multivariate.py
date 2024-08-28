@@ -195,6 +195,7 @@ class PrimaryMassChiEffCopulaSPSMD(PrimaryMassChiEffCopulaBase):
         return dict(gaussian_mass_maximum=self.mmax)
     BaseSmoothedMassDistribution
 
+
 class PrimaryMassChiEffCopulaMPSMD(PrimaryMassChiEffCopulaBase):
     """
     """
