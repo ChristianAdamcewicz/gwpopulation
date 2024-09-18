@@ -153,6 +153,39 @@ def _configure_jax(xp, sci):
     sci.cumtrapz = _cumtrapz
 
 
+def _configure_cupy(xp, sci):
+    """
+    Configuration requirements for :code:`cupy`
+    """
+    
+    def _tupleset(t, i, value):
+        l = list(t)
+        l[i] = value
+        return tuple(l)
+    def _cumtrapz(y, x=None, axis=-1, initial=0):
+        """
+        Adapted from https://github.com/scipy/scipy/blob/v0.14.0/scipy/integrate/quadrature.py#L193
+        """
+        y = xp.asarray(y)
+        x = xp.asarray(x)
+        d = xp.diff(x)
+        # reshape to correct shape
+        shape = [1] * y.ndim
+        shape[axis] = -1
+        d = d.reshape(shape)
+        nd = len(y.shape)
+        slice1 = _tupleset((slice(None),)*nd, axis, slice(1, None))
+        slice2 = _tupleset((slice(None),)*nd, axis, slice(None, -1))
+        res = xp.cumsum(d * (y[slice1] + y[slice2]) / 2.0, axis=axis)
+        shape = list(res.shape)
+        shape[axis] = 1
+        res = xp.concatenate([xp.ones(shape, dtype=res.dtype) * initial, res],
+                            axis=axis)
+        return res
+        
+    sci.cumtrapz = _cumtrapz
+
+
 def _load_numpy_and_scipy(backend):
     try:
         xp = import_module(_np_module[backend])
@@ -165,6 +198,8 @@ def _load_numpy_and_scipy(backend):
 
     if backend == "jax":
         _configure_jax(xp, sci)
+    if backend == "cupy":
+        _configure_cupy(xp, sci)
 
     return xp, scs, sci
 
