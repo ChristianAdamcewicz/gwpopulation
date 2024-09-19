@@ -190,7 +190,10 @@ def _load_numpy_and_scipy(backend):
     try:
         xp = import_module(_np_module[backend])
         scs = import_module(_scipy_module[backend]).special
-        sci = import_module(_scipy_module[backend]).integrate
+        if backend == "cupy":
+            sci = import_module(_scipy_module[backend])
+        else:
+            sci = import_module(_scipy_module[backend]).integrate
     except ModuleNotFoundError:
         raise ModuleNotFoundError(f"{backend} not installed for gwpopulation")
     except ImportError:
