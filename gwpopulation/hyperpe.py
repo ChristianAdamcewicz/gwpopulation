@@ -151,7 +151,7 @@ class HyperparameterLikelihood(Likelihood):
         self.conversion_function = conversion_function
         self.selection_function = selection_function
 
-        self.n_posteriors = len(list(posteriors.items())[0])
+        self.n_posteriors = len(list(posteriors.values())[0])
         self.maximum_uncertainty = maximum_uncertainty
         self._inf = np.nan_to_num(np.inf)
 
