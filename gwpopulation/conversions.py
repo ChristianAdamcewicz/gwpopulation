@@ -62,6 +62,14 @@ def convert_to_beta_parameters(parameters, remove=True):
     if not done:
         _ = _convert("")
 
+    subpop_norm = 0.
+    for key in parameters.keys():
+        if 'lambda_' in key.lower():
+            subpop_norm += parameters[key]
+    for key in parameters.keys():
+        if 'lambda_' in key.lower():
+            converted[key] /= subpop_norm
+
     return converted, added_keys
 
 

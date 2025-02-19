@@ -94,3 +94,51 @@ class JittedLikelihood(Likelihood):
         return float(
             np.nan_to_num(self.likelihood_func(self.parameters, **self.kwargs))
         )
+
+
+class JittedLikelihoodNew(Likelihood):
+    def __init__(
+        self,
+        likelihood,
+        kwargs=None
+    ):
+        from jax import jit
+
+        if kwargs is None:
+            kwargs = dict()
+        self.kwargs = kwargs
+        self._likelihood = likelihood
+
+        def log_likelihood_ratio_func(likelihood, parameters):
+            likelihood.parameters.update(parameters)
+            return likelihood.log_likelihood_ratio()
+        def noise_log_likelihood_func(likelihood):
+            return likelihood.noise_log_likelihood()
+        def log_likelihood_func(likelihood, parameters):
+            likelihood.parameters.update(parameters)
+            return likelihood.log_likelihood()
+        
+        self.log_likelihood_ratio_func = jit(partial(log_likelihood_ratio_func, likelihood))
+        self.noise_log_likelihood_func = jit(partial(noise_log_likelihood_func, likelihood))
+        self.log_likelihood_func = jit(partial(log_likelihood_func, likelihood))
+
+        super().__init__(dict())
+
+    def __getattr__(self, name):
+        return getattr(self._likelihood, name)
+
+    def log_likelihood_ratio(self):
+        return float(
+            np.nan_to_num(self.log_likelihood_ratio_func(self.parameters, **self.kwargs))
+        )
+
+    def noise_log_likelihood(self):
+        return float(
+            np.nan_to_num(self.noise_log_likelihood_func(**self.kwargs))
+        )
+    
+    def log_likelihood(self):
+        return float(
+            np.nan_to_num(self.log_likelihood_func(self.parameters, **self.kwargs))
+        )
+    
