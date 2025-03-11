@@ -280,7 +280,8 @@ class HyperparameterLikelihood(Likelihood):
         """
         self.parameters.update(sample.copy())
         self.parameters, added_keys = self.conversion_function(self.parameters)
-        self.hyper_prior.parameters.update(self.parameters)
+        for subpop in self.subpops:
+            self.hyper_prior[subpop].parameters.update(self.parameters)
         ln_ls, variances = self._compute_per_event_ln_bayes_factors(
             return_uncertainty=True
         )
