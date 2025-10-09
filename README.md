@@ -9,6 +9,14 @@
 [![Versions](https://img.shields.io/pypi/pyversions/gwpopulation.svg)](https://pypi.org/project/gwpopulation/)
 ![Conda Downloads](https://img.shields.io/conda/d/conda-forge/gwpopulation)
 
+This modified branch of [gwpopulation](https://github.com/ColmTalbot/GWPopulation) enables population reweighting using multiple sample sets for each event. This helps fit for sharp features in the population, by reweighting sets of samples generated using a narrow prior (ensuring high reweighting efficiencies around the sharp feature) combined with samples generated using a broader prior (ensuring decent reweighting efficiences elsewhere).
+
+See the analyses in [Adamcewicz et al. (2025)](https://arxiv.org/abs/2509.04706) for example.
+
+This modified branch has an associated modified branch in [gwpopulation_pipe](https://git.ligo.org/christian.adamcewicz/gwpopulation_pipe/-/tree/subpops). See this repository for functioning example code.
+
+------------------------------------------------------------------------------
+
 Flexible, extensible, hardware-agnostic gravitational-wave population inference.
 
 - [Documentation](https://ColmTalbot.github.io/gwpopulation)
@@ -50,3 +58,17 @@ Please cite [Talbot _et al._ (2019)](https://doi.org/10.1103/PhysRevD.100.043030
 ```
 
 Additionally, please consider citing the original references for the implemented models which should be include in docstrings.
+
+Also cite [Adamcewicz et al. (2025)](https://arxiv.org/abs/2509.04706) if using these modifications.
+
+```bibtex
+@article{Adamcewicz:2025phm,
+    author = "Adamcewicz, Christian and Guttman, Nir and Lasky, Paul D. and Thrane, Eric",
+    title = "{Do both black holes spin in merging binaries? Evidence from GWTC-4 and astrophysical implications}",
+    eprint = "2509.04706",
+    archivePrefix = "arXiv",
+    primaryClass = "astro-ph.HE",
+    month = "9",
+    year = "2025"
+}
+```
