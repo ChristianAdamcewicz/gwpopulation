@@ -212,13 +212,24 @@ class HyperparameterLikelihood(Likelihood):
     def _compute_per_event_ln_bayes_factors(self, return_uncertainty=True):
         per_event_bayes_factors = xp.zeros(self.n_posteriors)
         variance = xp.zeros(self.n_posteriors)
-        for subpop in self.subpops:
+        #final_lambda = 1. ## bilby dirichlet
+        #branched_lambdas = 1. ### branched uniform
+        for i, subpop in enumerate(self.subpops):
+            lambda_subpop = self.parameters[f'lambda_{subpop}']
+            #if subpop != self.subpops[-1]: ## bilby dirichlet/### branched uniform
+                #lambda_subpop = branched_lambdas * self.parameters[f'lambda_{i}'] ### branched uniform
+                #branched_lambdas *= (1 - self.parameters[f'lambda_{i}']) ### branched uniform
+                #lambda_subpop = self.parameters[f'lambda_{i}'] ## bilby dirichlet
+                #final_lambda -= lambda_subpop ## bilby dirichlet
+            #else: ## bilby dirichlet/### branched uniform
+                #lambda_subpop = branched_lambdas ### branched uniform
+                #lambda_subpop = final_lambda ## bilby dirichlet
             bayes_factor = xp.exp(self.ln_evidences[subpop] - self.ln_evidences[self.subpops[0]])
             weights = self.hyper_prior[subpop].prob(self.data[subpop]) / self.sampling_prior[subpop]
-            expectation = self.parameters[f'lambda_{subpop}'] * xp.mean(weights, axis=-1)
+            expectation = lambda_subpop * xp.mean(weights, axis=-1)
             per_event_bayes_factors += bayes_factor * expectation
             if return_uncertainty:
-                square_expectation = self.parameters[f'lambda_{subpop}']**2 * xp.mean(weights**2, axis=-1)
+                square_expectation = lambda_subpop**2 * xp.mean(weights**2, axis=-1)
                 variance += (
                     bayes_factor**2 * (square_expectation - expectation**2) / self.samples_per_posterior[subpop]
                 )

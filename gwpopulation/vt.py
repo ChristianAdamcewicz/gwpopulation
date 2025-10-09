@@ -60,12 +60,17 @@ __all__ = [
 
 class _BaseVT:
     def __init__(self, model, data):
-        self.data = data
-        if isinstance(model, list):
-            model = Model(model)
-        elif not isinstance(model, Model):
-            model = Model([model])
-        self.model = model
+        self.subpops = list(data.keys())
+        self.data = dict()
+        self.model = dict()
+        for subpop in self.subpops:
+            self.data[subpop] = data[subpop]
+            if isinstance(model[subpop], list):
+                self.model[subpop] = Model(model[subpop])
+            elif not isinstance(model[subpop], Model):
+                self.model[subpop] = Model([model[subpop]])
+            else:
+                self.model[subpop] = model[subpop]
 
     def __call__(self, *args, **kwargs):
         raise NotImplementedError
@@ -152,12 +157,18 @@ class ResamplingVT(_BaseVT):
     ):
         super(ResamplingVT, self).__init__(model=model, data=data)
         self.n_events = n_events
-        self.total_injections = data.get("total_generated", len(data["prior"]))
-        self.analysis_time = data.get("analysis_time", 1)
+        self.total_injections = sum(
+            data[subpop].get("total_generated", len(data[subpop]["prior"])) for subpop in self.subpops
+        )
+        self.prior_fracs = {
+            subpop: data[subpop].get("total_generated", len(data[subpop]["prior"])) / self.total_injections
+            for subpop in self.subpops
+        }
+        self.analysis_time = data[self.subpops[0]].get("analysis_time", 1)
         self.redshift_model = None
         self.marginalize_uncertainty = marginalize_uncertainty
         self.enforce_convergence = enforce_convergence
-        for _model in self.model.models:
+        for _model in self.model[self.subpops[0]].models:
             if isinstance(_model, _Redshift):
                 self.redshift_model = _model
         if self.redshift_model is None:
@@ -250,14 +261,26 @@ class ResamplingVT(_BaseVT):
         var: float
             The variance in the estimate of :math:`P_{\rm det}`.
         """
-        self.model.parameters.update(parameters)
-        weights = self.model.prob(self.data) / self.data["prior"]
-        mu = to_number(xp.sum(weights) / self.total_injections, float)
+        sum_weights = 0.
+        sum_square_weights = 0.
+        for subpop in self.subpops:
+            self.model[subpop].parameters.update(parameters)
+            weights = self.model[subpop].prob(self.data[subpop]) / self.data[subpop]["prior"]
+            sum_weights += parameters[f'lambda_{subpop}'] / self.prior_fracs[subpop] * xp.sum(weights)
+            sum_square_weights += (parameters[f'lambda_{subpop}'] / self.prior_fracs[subpop])**2 * xp.sum(weights**2)
+
+        mu = to_number(sum_weights / self.total_injections, float)
+        #var = to_number(
+        #    sum_square_weights / self.total_injections**2
+        #    - mu**2 / self.total_injections,
+        #    float,
+        #)
         var = to_number(
-            xp.sum(weights**2) / self.total_injections**2
+            xp.exp(xp.log(sum_square_weights) - 2*xp.log(self.total_injections))
             - mu**2 / self.total_injections,
-            float,
+            float
         )
+
         return mu, var
 
     def surveyed_hypervolume(self, parameters):
