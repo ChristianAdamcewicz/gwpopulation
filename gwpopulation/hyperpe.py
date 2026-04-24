@@ -107,8 +107,10 @@ class HyperparameterLikelihood(Likelihood):
             -inf will be returned. Default = inf
         """
 
-        self.samples_per_posterior = max_samples
         self.data = self.resample_posteriors(posteriors, max_samples=max_samples)
+        _data_key = next(iter(self.data))
+        self.samples_per_posterior = xp.sum(self.data[_data_key]==self.data[_data_key], axis=-1)
+        logger.info(f"Samples per posterior: {self.samples_per_posterior}")
 
         if isinstance(hyper_prior, types.FunctionType):
             hyper_prior = Model([hyper_prior])
@@ -195,9 +197,10 @@ class HyperparameterLikelihood(Likelihood):
         self, parameters, *, return_uncertainty=True
     ):
         weights = self.hyper_prior.prob(self.data, **parameters) / self.sampling_prior
-        expectation = xp.mean(weights, axis=-1)
+        weights = xp.nan_to_num(weights, nan=0.)
+        expectation = xp.sum(weights, axis=-1) / self.samples_per_posterior
         if return_uncertainty:
-            square_expectation = xp.mean(weights**2, axis=-1)
+            square_expectation = xp.sum(weights**2, axis=-1) / self.samples_per_posterior
             variance = (square_expectation - expectation**2) / (
                 self.samples_per_posterior * expectation**2
             )
@@ -370,13 +373,14 @@ class HyperparameterLikelihood(Likelihood):
             samples = [dict(samples.iloc[ii]) for ii in range(len(samples))]
         elif isinstance(samples, dict):
             samples = [samples]
-        weights = xp.zeros((self.n_posteriors, self.samples_per_posterior))
+        weights = xp.zeros((self.n_posteriors, xp.max(self.samples_per_posterior)))
         event_weights = xp.zeros(self.n_posteriors)
         for sample in tqdm(samples):
             parameters, added_keys = self.conversion_function(sample.copy())
             new_weights = (
                 self.hyper_prior.prob(self.data, **parameters) / self.sampling_prior
             )
+            new_weights = xp.nan_to_num(new_weights, nan=0.)
             event_weights += xp.mean(new_weights, axis=-1)
             new_weights = (new_weights.T / xp.sum(new_weights, axis=-1)).T
             weights += new_weights
@@ -390,8 +394,8 @@ class HyperparameterLikelihood(Likelihood):
                 new_idxs = new_idxs.at[ii].set(
                     random.choice(
                         rng_key,
-                        xp.arange(self.samples_per_posterior),
-                        shape=(self.samples_per_posterior,),
+                        xp.arange(xp.max(self.samples_per_posterior)),
+                        shape=(xp.max(self.samples_per_posterior),),
                         replace=True,
                         p=weights[ii],
                     )
@@ -399,8 +403,8 @@ class HyperparameterLikelihood(Likelihood):
             else:
                 new_idxs[ii] = xp.asarray(
                     np.random.choice(
-                        range(self.samples_per_posterior),
-                        size=self.samples_per_posterior,
+                        range(xp.max(self.samples_per_posterior)),
+                        size=xp.max(self.samples_per_posterior),
                         replace=True,
                         p=to_numpy(weights[ii]),
                     )
